@@ -1070,6 +1070,8 @@ export function adoptExternalSessionFromHook(
 
   persistAgents: () => void,
   onAgentCreated?: (agent: AgentState) => void,
+  /** Character label for a hooks-only session (wins over the cwd folder name). */
+  displayName?: string,
 ): void {
   if (transcriptPath) {
     // File-based provider (Claude, Codex): adopt with JSONL file watching
@@ -1115,7 +1117,8 @@ export function adoptExternalSessionFromHook(
   } else {
     // Hooks-only provider (OpenCode, Copilot): no transcript file, all state from hooks
     const id = nextAgentIdRef.current++;
-    const folderName = folderNameResolver?.({ cwd }) ?? (cwd ? path.basename(cwd) : undefined);
+    const folderName =
+      displayName ?? folderNameResolver?.({ cwd }) ?? (cwd ? path.basename(cwd) : undefined);
     const agent: AgentState = {
       id,
       sessionId,

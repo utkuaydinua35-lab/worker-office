@@ -38,6 +38,7 @@ import type { HookEvent } from './hookEventHandler.js';
 import { HookEventHandler } from './hookEventHandler.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { PathSet, pathsMatch } from './pathKey.js';
+import { ingestOnlyProviders } from './providers/index.js';
 import { SessionRouter } from './sessionRouter.js';
 import { SubagentWatch } from './subagentWatch.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
@@ -88,6 +89,8 @@ export class AgentRuntime {
   constructor(
     private readonly store: AgentStateStore,
     provider: HookProvider,
+    /** Providers that only post events (no install, no transcripts), e.g. CrewAI. */
+    extraProviders: readonly HookProvider[] = ingestOnlyProviders,
   ) {
     // Wire module-level dependencies
     setDismissalTracker(this.dismissalTracker);
@@ -149,11 +152,12 @@ export class AgentRuntime {
       provider,
       new SessionRouter(),
       this.watchAllSessions,
+      extraProviders,
     );
 
     // Wire hook lifecycle callbacks to shared agent operations
     this.hookEventHandler.setLifecycleCallbacks({
-      onExternalSessionDetected: (sessionId, transcriptPath, cwd) => {
+      onExternalSessionDetected: (sessionId, transcriptPath, cwd, extras) => {
         const projectDir = transcriptPath ? path.dirname(transcriptPath) : cwd;
         // Teammate session of a tracked lead? Attach it as a teammate character
         // instead of adopting a generic external agent -- and regardless of the
@@ -192,7 +196,10 @@ export class AgentRuntime {
             }
           }
         }
-        if (!isTrackedProjectDir(projectDir) && !this.watchAllSessions.current) {
+        // Ingest-only providers (CrewAI) are opted in by the sender itself:
+        // it read our server.json token and posted to us on purpose.
+        const senderOptedIn = extras?.providerId !== undefined && extras.providerId !== provider.id;
+        if (!senderOptedIn && !isTrackedProjectDir(projectDir) && !this.watchAllSessions.current) {
           console.log(
             `[Pixel Agents] Hook: external session ${sessionId.slice(0, 8)}... not adopted ` +
               `(project untracked, Watch All Sessions off)`,
@@ -212,6 +219,7 @@ export class AgentRuntime {
           this.permissionTimers,
           () => this.store.persist(),
           (agent) => this.registerAgent(agent.sessionId, agent.id),
+          extras?.agentName,
         );
       },
       onSessionClear: (agentId, newSessionId, newTranscriptPath) => {

@@ -37,6 +37,7 @@ interface SessionLifecycleCallbacks {
     sessionId: string,
     transcriptPath: string | undefined,
     cwd: string,
+    extras?: { providerId?: string; agentName?: string },
   ) => void;
   /** Called when /clear is detected via hooks (SessionEnd reason=clear + SessionStart source=clear). */
   onSessionClear?: (
@@ -69,6 +70,9 @@ export class HookEventHandler {
     private provider: HookProvider,
     private sessionRouter: SessionRouter,
     private watchAllSessionsRef?: { current: boolean },
+    /** Additional providers accepted on `/api/hooks/:providerId`, keyed by id.
+     *  Events naming an unknown id go to the primary `provider`. */
+    private extraProviders: readonly HookProvider[] = [],
   ) {
     if (provider.protocolVersion !== HookEventHandler.SUPPORTED_PROTOCOL_VERSION) {
       console.warn(
@@ -77,6 +81,11 @@ export class HookEventHandler {
           `Events from this provider will be dropped.`,
       );
     }
+  }
+
+  /** The provider that normalizes events posted under `providerId`. */
+  private providerFor(providerId: string): HookProvider {
+    return this.extraProviders.find((p) => p.id === providerId) ?? this.provider;
   }
 
   /** Merged set of tool names that spawn subagents (teammates + within-turn subagents
@@ -130,7 +139,8 @@ export class HookEventHandler {
    * @param event - The hook event payload from the CLI tool
    */
   handleEvent(_providerId: string, event: HookEvent): void {
-    if (this.provider.protocolVersion !== HookEventHandler.SUPPORTED_PROTOCOL_VERSION) {
+    const provider = this.providerFor(_providerId);
+    if (provider.protocolVersion !== HookEventHandler.SUPPORTED_PROTOCOL_VERSION) {
       return; // version mismatch already logged in constructor
     }
     // ── Provider normalization boundary ───────────────────────────────────────
@@ -140,7 +150,7 @@ export class HookEventHandler {
     // uses the normalized AgentEvent.kind. Raw `event.*` reads are still allowed in a few
     // places for provider-specific metadata that AgentEvent doesn't capture (transcript_path,
     // cwd for external-session adoption; event-specific teammate identity for routing).
-    const normalized = this.provider.normalizeHookEvent(event);
+    const normalized = provider.normalizeHookEvent(event);
     if (!normalized) return; // unknown / uninteresting event -- silently drop
     const normEvent = normalized.event;
     const eventName = event.hook_event_name; // retained for logs only
@@ -243,6 +253,8 @@ export class HookEventHandler {
           sessionId: event.session_id,
           transcriptPath,
           cwd: cwd ?? '',
+          providerId: provider.id,
+          agentName: normEvent.agentName,
         });
       } else {
         if (debug && tracked)
@@ -275,6 +287,7 @@ export class HookEventHandler {
         pending.sessionId,
         pending.transcriptPath,
         pending.cwd,
+        { providerId: pending.providerId, agentName: pending.agentName },
       );
       // Re-process this event now that the agent exists
       this.handleEvent(_providerId, event);
@@ -328,7 +341,7 @@ export class HookEventHandler {
       case 'sessionEnd':
         return this.handleSessionEnd(normEvent, agent, agentId);
       case 'toolStart':
-        return this.handlePreToolUse(normEvent, agent, agentId);
+        return this.handlePreToolUse(normEvent, agent, agentId, provider);
       case 'toolEnd':
         // Both PostToolUse and PostToolUseFailure normalize to toolEnd. Distinguishing
         // them inside handlers would require extra info; the existing behavior was
@@ -412,10 +425,11 @@ export class HookEventHandler {
     normEvent: Extract<AgentEvent, { kind: 'toolStart' }>,
     agent: AgentState,
     agentId: number,
+    provider: HookProvider,
   ): void {
     const toolName = normEvent.toolName;
     const toolInput = (normEvent.input as Record<string, unknown> | undefined) ?? {};
-    const status = this.provider.formatToolStatus(toolName, toolInput);
+    const status = provider.formatToolStatus(toolName, toolInput);
     const hookToolId = `hook-${Date.now()}`;
 
     // Track for PostToolUse/SubagentStart correlation (always, even if suppressed below).
@@ -424,7 +438,7 @@ export class HookEventHandler {
     agent.currentHookToolId = hookToolId;
     agent.currentHookToolName = toolName;
     agent.currentHookIsTeammateSpawn =
-      this.provider.team?.isTeammateSpawnCall(toolName, toolInput) ?? false;
+      provider.team?.isTeammateSpawnCall(toolName, toolInput) ?? false;
 
     // When a lead has inline teammates, hook tool events are ambiguous (could be
     // from the lead or any teammate -- they share session_id). Suppress hook-originated
@@ -442,7 +456,7 @@ export class HookEventHandler {
     // tool ID (not the transient hook ID) so that SubagentStop/tool_result cleanup
     // can find and remove them. JSONL handles agentToolStart (with runInBackground)
     // for these tools.
-    if (toolName !== 'Task' && toolName !== 'Agent') {
+    if (!provider.subagentToolNames.has(toolName)) {
       this.agents.broadcast({
         type: 'agentToolStart',
         id: agentId,

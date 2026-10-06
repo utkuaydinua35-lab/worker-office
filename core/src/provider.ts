@@ -59,6 +59,9 @@ export type AgentEvent =
       /** Working directory the session was started in. Used to match pending
        *  external sessions against known workspace folders. */
       cwd?: string;
+      /** Display name for a hooks-only session's character (e.g. a CrewAI
+       *  agent's role). Transcript-backed providers leave it unset. */
+      agentName?: string;
     }
   | { kind: 'sessionEnd'; reason?: string };
 

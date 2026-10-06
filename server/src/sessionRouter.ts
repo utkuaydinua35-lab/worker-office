@@ -6,6 +6,10 @@ export interface PendingExternalSession {
   /** Transcript file path. Undefined for providers without transcripts (OpenCode, Copilot). */
   transcriptPath: string | undefined;
   cwd: string;
+  /** Provider that reported the session (e.g. 'claude', 'crewai'). */
+  providerId?: string;
+  /** Display name for a hooks-only session's character. */
+  agentName?: string;
 }
 
 /** An event waiting to be dispatched once its agent registers. */

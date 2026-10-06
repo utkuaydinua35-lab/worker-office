@@ -13,14 +13,20 @@
 
 import type { HookProvider } from '../../../core/src/provider.js';
 import { claudeProvider } from './hook/claude/claude.js';
+import { crewaiProvider } from './hook/crewai/crewai.js';
 
-export { claudeProvider };
+export { claudeProvider, crewaiProvider };
 export { copyHookScript } from './hook/claude/claudeHookInstaller.js';
 
 /** Every bundled hook provider, in registration order. The consent gate loops
  *  over this at the webviewReady handshake (one ask per provider that needs
  *  one) and `hooksConsentResponse` resolves its provider id against it. */
 export const hookProviders: readonly HookProvider[] = [claudeProvider];
+
+/** Providers whose events are accepted on `/api/hooks/:providerId` but that
+ *  install nothing (the integration is enabled on the other tool's side), so
+ *  the consent gate never asks about them. */
+export const ingestOnlyProviders: readonly HookProvider[] = [crewaiProvider];
 
 /** Resolve a wire-supplied provider id, or undefined for an unknown one —
  *  the caller writes nothing on undefined (fail-closed, like a junk choice). */
