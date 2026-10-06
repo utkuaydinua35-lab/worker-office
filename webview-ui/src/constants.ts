@@ -312,3 +312,13 @@ export const PET_THUMB_SCALE_MARGIN = 0.85;
 export const EMPTY_SPRITE_THUMBNAIL_BG = '#333';
 /** Maximum string length for a PlacedPet.id (defends against pathologically-long layout entries). */
 export const MAX_PET_ID_LENGTH = 128;
+
+// ── Crew panel (standalone office workers) ──────────────────
+/** How often the open crew panel refreshes workers and task status. */
+export const CREW_POLL_INTERVAL_MS = 2000;
+/** Zoom used to draw a worker's character preview in the crew panel. */
+export const CREW_PREVIEW_ZOOM = 4;
+/** Number of bundled character looks a worker can pick from. */
+export const CREW_LOOK_COUNT = 6;
+/** Hue-shift slider step (degrees). */
+export const CREW_HUE_STEP = 15;

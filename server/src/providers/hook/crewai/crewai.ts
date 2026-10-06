@@ -16,6 +16,8 @@ import type { AgentEvent, HookProvider } from '../../../../../core/src/provider.
 import {
   CREWAI_HOOK_EVENTS,
   CREWAI_PROVIDER_ID,
+  CREWAI_TASK_TOOL_NAME,
+  CREWAI_TOOL_STATUS_LABELS,
   CREWAI_TOOL_STATUS_MAX_LENGTH,
 } from './constants.js';
 
@@ -71,11 +73,11 @@ export function normalizeCrewAIHookEvent(
 }
 
 export function formatCrewAIToolStatus(toolName: string, input?: unknown): string {
-  if (toolName === 'Task') {
+  if (toolName === CREWAI_TASK_TOOL_NAME) {
     const desc = str((input as Record<string, unknown> | undefined)?.description);
-    return desc ? truncate(`Working on: ${desc}`) : 'Working on task';
+    return desc ? truncate(`Görevde: ${desc}`) : 'Görev üzerinde çalışıyor';
   }
-  return truncate(`Using ${toolName}`);
+  return truncate(CREWAI_TOOL_STATUS_LABELS[toolName.toLowerCase()] ?? `Kullanıyor: ${toolName}`);
 }
 
 export const crewaiProvider: HookProvider = {
@@ -104,7 +106,7 @@ export const crewaiProvider: HookProvider = {
   },
 
   formatToolStatus: formatCrewAIToolStatus,
-  permissionExemptTools: new Set(['Task']),
+  permissionExemptTools: new Set([CREWAI_TASK_TOOL_NAME]),
   subagentToolNames: new Set(),
   readingTools: new Set(),
 };

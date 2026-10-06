@@ -107,3 +107,25 @@ export const PALETTE_COUNT = 6;
  *  clientMessageHandler to guard saveAgentSeats payloads from a remote or
  *  hand-edited source corrupting the stored values with out-of-range values. */
 export const HUE_SHIFT_MAX_DEG = 360;
+
+// ── Workers (standalone office crew, run through CrewAI) ────
+/** File under ~/.pixel-agents/ holding the office's workers, AI settings and task history. */
+export const WORKERS_FILE_NAME = 'workers.json';
+/** HTTP prefix for the workers API (bearer-authenticated with the server token). */
+export const WORKERS_API_PREFIX = '/api/workers';
+/** Session id prefix of a worker's office character (`worker-<workerId>`). */
+export const WORKER_SESSION_PREFIX = 'worker-';
+/** Default Claude model for workers. */
+export const WORKER_DEFAULT_ANTHROPIC_MODEL = 'claude-opus-5-5';
+/** Tasks kept in history; older finished tasks are dropped. */
+export const WORKER_TASK_HISTORY_LIMIT = 100;
+/** Max characters stored for one task's output or error text. */
+export const WORKER_TASK_TEXT_MAX_LENGTH = 50_000;
+/** Max characters for worker text fields (name, role, goal, backstory, task). */
+export const WORKER_FIELD_MAX_LENGTH = 4_000;
+/** Max workers in one office. */
+export const WORKER_MAX_COUNT = 20;
+/** Marker the Python runner prints before its final JSON result line. */
+export const WORKER_RESULT_MARKER = '@@WORKER_RESULT@@';
+/** Hard cap on one task's runtime before the runner is killed. */
+export const WORKER_TASK_TIMEOUT_MS = 30 * 60 * 1000;

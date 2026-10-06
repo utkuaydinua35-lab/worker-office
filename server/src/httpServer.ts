@@ -16,10 +16,12 @@ import { handleClientMessage } from './clientMessageHandler.js';
 import {
   HOOK_API_PREFIX,
   MAX_HOOK_BODY_SIZE,
+  WORKERS_API_PREFIX,
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
 import type { AgentState } from './types.js';
+import { WorkerError, type WorkerService } from './workers/workerService.js';
 
 /** Options for creating the HTTP + WebSocket server. */
 export interface HttpServerOptions {
@@ -45,6 +47,8 @@ export interface HttpServerOptions {
   onSetHooksEnabled?: SetHooksEnabledSideEffect;
   /** Invoked when an external asset directory is added/removed. Standalone reloads + re-broadcasts assets here. */
   onReloadAssets?: ReloadAssetsSideEffect;
+  /** Office crew (standalone only): enables the bearer-authenticated /api/workers routes. */
+  workers?: WorkerService;
 }
 
 /** Result of createHttpServer(). */
@@ -87,6 +91,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
   registerHealthRoute(app);
   registerHookRoute(app, options);
   registerWebSocketRoute(app, options);
+  if (options.workers) registerWorkerRoutes(app, options.token, options.workers);
 
   // ── Listen ──────────────────────────────────────────────────
 
@@ -137,6 +142,50 @@ function registerHookRoute(app: FastifyInstance, options: HttpServerOptions): vo
 
       reply.send('ok');
     },
+  );
+}
+
+// ── Workers ────────────────────────────────────────────────────
+
+function registerWorkerRoutes(app: FastifyInstance, token: string, workers: WorkerService): void {
+  const auth = { preHandler: bearerAuth(token) };
+  type IdParams = { Params: { id: string }; Body: unknown };
+
+  /** Run a mutation and answer with the fresh view, or the user-facing error. */
+  const respond = (reply: FastifyReply, action: () => void) => {
+    try {
+      action();
+      reply.send(workers.view());
+    } catch (err) {
+      if (err instanceof WorkerError) {
+        reply.code(err.status).send({ error: err.message });
+      } else {
+        console.error('[Pixel Agents] Workers:', err);
+        reply.code(500).send({ error: 'Beklenmeyen bir hata oluştu.' });
+      }
+    }
+  };
+
+  app.get(WORKERS_API_PREFIX, auth, async () => workers.view());
+  app.put<{ Body: unknown }>(`${WORKERS_API_PREFIX}/settings`, auth, (req, reply) =>
+    respond(reply, () => workers.updateSettings(req.body)),
+  );
+  app.post<{ Body: unknown }>(WORKERS_API_PREFIX, auth, (req, reply) =>
+    respond(reply, () => workers.createWorker(req.body)),
+  );
+  app.put<IdParams>(`${WORKERS_API_PREFIX}/:id`, auth, (req, reply) =>
+    respond(reply, () => workers.updateWorker(req.params.id, req.body)),
+  );
+  app.delete<IdParams>(`${WORKERS_API_PREFIX}/:id`, auth, (req, reply) =>
+    respond(reply, () => workers.deleteWorker(req.params.id)),
+  );
+  app.post<IdParams>(`${WORKERS_API_PREFIX}/:id/tasks`, auth, (req, reply) =>
+    respond(reply, () =>
+      workers.assignTask(req.params.id, (req.body as { description?: unknown })?.description),
+    ),
+  );
+  app.post<IdParams>(`${WORKERS_API_PREFIX}/tasks/:id/stop`, auth, (req, reply) =>
+    respond(reply, () => workers.stopTask(req.params.id)),
   );
 }
 

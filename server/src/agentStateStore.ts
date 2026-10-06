@@ -156,6 +156,7 @@ export class AgentStateStore {
       // them from sidecars after a restore. Persisting them would resurrect
       // immortal characters whose completion signal never comes.
       if (agent.spawnToolUseId) continue;
+      if (agent.isWorker) continue;
       persisted.push({
         id: agent.id,
         sessionId: agent.sessionId,

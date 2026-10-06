@@ -13,6 +13,9 @@ interface BottomToolbarProps {
   isSettingsOpen: boolean;
   onToggleSettings: () => void;
   workspaceFolders: WorkspaceFolder[];
+  /** Standalone office crew panel. */
+  isCrewOpen: boolean;
+  onToggleCrew: () => void;
 }
 
 export function BottomToolbar({
@@ -22,6 +25,8 @@ export function BottomToolbar({
   isSettingsOpen,
   onToggleSettings,
   workspaceFolders,
+  isCrewOpen,
+  onToggleCrew,
 }: BottomToolbarProps) {
   const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
   const [isBypassMenuOpen, setIsBypassMenuOpen] = useState(false);
@@ -119,6 +124,16 @@ export function BottomToolbar({
             ))}
           </Dropdown>
         </div>
+      )}
+      {isBrowserRuntime && (
+        <Button
+          variant="accent"
+          onClick={onToggleCrew}
+          className={isCrewOpen ? 'bg-accent-bright' : 'bg-accent hover:bg-accent-bright'}
+          title="Worker ekle, kişiselleştir, yetkilendir ve görev ver"
+        >
+          Ekip
+        </Button>
       )}
       <Button
         variant={isEditMode ? 'active' : 'default'}

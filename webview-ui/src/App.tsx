@@ -4,6 +4,7 @@ import { toMajorMinor } from './changelogData.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
 import { ChangelogModal } from './components/ChangelogModal.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
+import { CrewPanel } from './components/CrewPanel.js';
 import { DebugView } from './components/DebugView.js';
 import { EditActionBar } from './components/EditActionBar.js';
 import { IntroBubble } from './components/IntroBubble.js';
@@ -104,6 +105,7 @@ function App() {
 
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isCrewOpen, setIsCrewOpen] = useState(false);
   const [isHooksInfoOpen, setIsHooksInfoOpen] = useState(false);
   const [hooksTooltipDismissed, setHooksTooltipDismissed] = useState(false);
   const [isDebugMode, setIsDebugMode] = useState(false);
@@ -518,7 +520,11 @@ function App() {
         isSettingsOpen={isSettingsOpen}
         onToggleSettings={() => setIsSettingsOpen((v) => !v)}
         workspaceFolders={workspaceFolders}
+        isCrewOpen={isCrewOpen}
+        onToggleCrew={() => setIsCrewOpen((v) => !v)}
       />
+
+      <CrewPanel isOpen={isCrewOpen} onClose={() => setIsCrewOpen(false)} />
 
       <VersionIndicator
         currentVersion={extensionVersion}
@@ -593,6 +599,7 @@ function App() {
           onClose={handleIntroClose}
           escapeSuppressed={
             isSettingsOpen ||
+            isCrewOpen ||
             isChangelogOpen ||
             isHooksInfoOpen ||
             showMigrationNotice ||

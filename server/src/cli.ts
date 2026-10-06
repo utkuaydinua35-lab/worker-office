@@ -8,6 +8,8 @@
  * Each connecting WebSocket client receives the full state on webviewReady.
  */
 
+import { spawn } from 'child_process';
+import * as os from 'os';
 import * as path from 'path';
 
 import { AgentRuntime } from './agentRuntime.js';
@@ -29,6 +31,7 @@ import { MAX_PORT, MIN_PORT } from './constants.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
+import { WorkerService } from './workers/workerService.js';
 
 // ── Argument parsing ──────────────────────────────────────────
 
@@ -37,6 +40,8 @@ export interface CliArgs {
    *  can run at once without a collision. --port picks a fixed one. */
   port?: number;
   host: string;
+  /** Open the office in the default browser once the server is up. */
+  open: boolean;
 }
 
 /** Thrown by parseArgs on an invalid --port. Kept separate from process.exit so
@@ -45,7 +50,7 @@ export interface CliArgs {
 export class CliArgsError extends Error {}
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { host: '127.0.0.1' };
+  const args: CliArgs = { host: '127.0.0.1', open: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--port' || argv[i] === '-p') {
       const raw = argv[i + 1];
@@ -65,12 +70,15 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (argv[i] === '--host' && argv[i + 1]) {
       args.host = argv[i + 1];
       i++;
+    } else if (argv[i] === '--open') {
+      args.open = true;
     } else if (argv[i] === '--help') {
       console.log(`Usage: pixel-agents [options]
 
 Options:
   --port, -p <number>   Port to listen on (default: OS-assigned ephemeral port)
   --host <string>       Host to bind to (default: 127.0.0.1)
+  --open                Open the office in the default browser
   --help                Show this help message`);
       process.exit(0);
     }
@@ -99,6 +107,20 @@ function copyHookScriptOrReport(packageRoot: string, context = ''): boolean {
   if (copyHookScript(packageRoot)) return true;
   console.error(`[Pixel Agents] Hooks NOT installed${context}: hook script missing.`);
   return false;
+}
+
+/** Best-effort: open a URL in the user's default browser. */
+function openInBrowser(url: string): void {
+  const command =
+    process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
+  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+  try {
+    spawn(command, args, { stdio: 'ignore', detached: true })
+      .on('error', () => {})
+      .unref();
+  } catch {
+    /* the URL is printed above; opening it is a convenience */
+  }
 }
 
 // ── Main ──────────────────────────────────────────────────────
@@ -227,6 +249,16 @@ async function main(): Promise<void> {
       console.log('[Pixel Agents] Assets reloaded (external directory change)');
     };
 
+    // Office crew: workers the user creates in the UI, run through CrewAI.
+    // The installer points PIXEL_AGENTS_WORKER_PYTHON at its Python venv.
+    const workers = new WorkerService(store, runtime, {
+      pythonPath: process.env['PIXEL_AGENTS_WORKER_PYTHON'],
+      runnerPath: path.join(packageRoot, 'server', 'workers', 'runner.py'),
+      filesDir:
+        process.env['PIXEL_AGENTS_WORKER_FILES'] ??
+        path.join(os.homedir(), 'WorkerOffice', 'Dosyalar'),
+    });
+
     const config = await server.start({
       store,
       runtime,
@@ -237,8 +269,10 @@ async function main(): Promise<void> {
       assetCache,
       onSetHooksEnabled,
       onReloadAssets,
+      workers,
     });
     currentConfig = { port: config.port, token: config.token };
+    workers.start();
 
     // Sync runtime refs with persisted settings BEFORE first scan tick. The
     // runtime's single hooksEnabled ref follows the Claude provider until the
@@ -302,13 +336,14 @@ async function main(): Promise<void> {
     // address; only the consent-bearing toggle needs the token.
     const displayHost =
       args.host === '0.0.0.0' || args.host === '::' || args.host === '' ? '127.0.0.1' : args.host;
-    console.log(
-      `\n  Pixel Agents server running at http://${displayHost}:${config.port}/?token=${config.token}\n`,
-    );
+    const officeUrl = `http://${displayHost}:${config.port}/?token=${config.token}`;
+    console.log(`\n  Pixel Agents server running at ${officeUrl}\n`);
+    if (args.open) openInBrowser(officeUrl);
 
     // ── Graceful shutdown ──
     function shutdown(): void {
       console.log('\nShutting down...');
+      workers.dispose();
       runtime.dispose();
       server.stop();
       process.exit(0);

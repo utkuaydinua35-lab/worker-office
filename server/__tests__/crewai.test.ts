@@ -50,10 +50,11 @@ describe('normalizeCrewAIHookEvent', () => {
   });
 
   it('formats tool status labels', () => {
-    expect(formatCrewAIToolStatus('Task', { description: 'Write report' })).toBe(
-      'Working on: Write report',
+    expect(formatCrewAIToolStatus('CrewTask', { description: 'Rapor yaz' })).toBe(
+      'Görevde: Rapor yaz',
     );
-    expect(formatCrewAIToolStatus('SerperDevTool')).toBe('Using SerperDevTool');
+    expect(formatCrewAIToolStatus('write_file')).toBe('Dosya yazıyor');
+    expect(formatCrewAIToolStatus('SerperDevTool')).toBe('Kullanıyor: SerperDevTool');
   });
 });
 
@@ -90,7 +91,7 @@ describe('AgentRuntime -- CrewAI events', () => {
     expect(agent.hooksOnly).toBe(true);
     expect(agent.folderName).toBe('Senior Researcher');
     expect(broadcasts).toContainEqual(
-      expect.objectContaining({ type: 'agentToolStart', status: 'Using SerperDevTool' }),
+      expect.objectContaining({ type: 'agentToolStart', status: 'Kullanıyor: SerperDevTool' }),
     );
 
     runtime.handleHookEvent('crewai', { hook_event_name: 'SessionEnd', session_id: sid });
