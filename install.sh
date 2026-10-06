@@ -63,11 +63,12 @@ if [ -z "$NODE_BIN" ]; then
   if [ ! -x "$NODE_BIN" ]; then
     info "Node.js $NODE_MAJOR indiriliyor..."
     base="https://nodejs.org/dist/latest-v$NODE_MAJOR.x"
-    file="$(curl -fsSL "$base/SHASUMS256.txt" | awk '{print $2}' | grep -E "^node-v[0-9.]+-$OS-$ARCH\.tar\.gz$" | head -1)"
+    file="$(curl -fsSL "$base/SHASUMS256.txt" | awk '{print $2}' | grep -E "^node-v[0-9.]+-$OS-$ARCH\.tar\.gz$" | head -1 || true)"
     [ -n "$file" ] || fail "Node.js indirme bağlantısı bulunamadı."
     rm -rf "$RUNTIME/node" "$RUNTIME/node.tmp"
     mkdir -p "$RUNTIME/node.tmp"
-    curl -fsSL "$base/$file" | tar -xz -C "$RUNTIME/node.tmp" --strip-components=1
+    curl -fsSL "$base/$file" | tar -xz -C "$RUNTIME/node.tmp" --strip-components=1 ||
+      fail "Node.js indirilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."
     mv "$RUNTIME/node.tmp" "$RUNTIME/node"
   fi
 fi
@@ -80,8 +81,16 @@ if [ -z "$UV_BIN" ]; then
   UV_BIN="$RUNTIME/uv/uv"
   if [ ! -x "$UV_BIN" ]; then
     info "Python araçları indiriliyor..."
-    curl -LsSf https://astral.sh/uv/install.sh |
-      env UV_INSTALL_DIR="$RUNTIME/uv" UV_NO_MODIFY_PATH=1 INSTALLER_NO_MODIFY_PATH=1 sh >/dev/null
+    case "$OS-$ARCH" in
+      darwin-arm64) target=aarch64-apple-darwin ;;
+      darwin-x64) target=x86_64-apple-darwin ;;
+      linux-arm64) target=aarch64-unknown-linux-gnu ;;
+      linux-x64) target=x86_64-unknown-linux-gnu ;;
+    esac
+    rm -rf "$RUNTIME/uv" && mkdir -p "$RUNTIME/uv"
+    curl -fsSL "https://github.com/astral-sh/uv/releases/latest/download/uv-$target.tar.gz" |
+      tar -xz -C "$RUNTIME/uv" --strip-components=1 ||
+      fail "Python araçları (uv) indirilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."
   fi
 fi
 [ -x "$UV_BIN" ] || fail "Python araçları (uv) kurulamadı."
@@ -111,7 +120,7 @@ if [ "$(cat "$APP_HOME/.office-built" 2>/dev/null)" != "$office_rev" ]; then
   step "Ofis hazırlanıyor"
   (
     cd "$APP_HOME/worker-office"
-    HUSKY=0 npm ci --no-audit --no-fund --loglevel=error
+    HUSKY=0 NPM_CONFIG_UPDATE_NOTIFIER=false npm ci --no-audit --no-fund --loglevel=error >/dev/null
     node esbuild.js --production >/dev/null
     npm run --silent build:webview >/dev/null
   ) || fail "Ofis derlenemedi. Komutu tekrar çalıştırmayı deneyin."
