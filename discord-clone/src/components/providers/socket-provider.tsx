@@ -6,6 +6,7 @@ import { io, type Socket } from 'socket.io-client';
 import {
   SOCKET_PATH,
   type ClientToServerEvents,
+  type RoomKind,
   type ServerToClientEvents,
 } from '@/lib/socket/events';
 
@@ -36,12 +37,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 export const useSocket = () => useContext(SocketContext);
 
 /**
- * Keeps this client in a channel/server room for as long as the component is
+ * Keeps this client in a channel/conversation/server room for as long as the component is
  * mounted. Socket.io forgets rooms on reconnect, so it re-joins on every
  * `connect`; `onJoined` fires after each successful join so callers can
  * re-fetch whatever they missed while disconnected.
  */
-export function useSocketRoom(kind: 'channel' | 'server', id: string, onJoined?: () => void) {
+export function useSocketRoom(kind: RoomKind, id: string, onJoined?: () => void) {
   const { socket } = useSocket();
   const [joined, setJoined] = useState(false);
   const onJoinedRef = useRef(onJoined);
@@ -53,10 +54,7 @@ export function useSocketRoom(kind: 'channel' | 'server', id: string, onJoined?:
       setJoined(ok);
       if (ok) onJoinedRef.current?.();
     };
-    const join = () => {
-      if (kind === 'channel') socket.emit('channel:join', id, ack);
-      else socket.emit('server:join', id, ack);
-    };
+    const join = () => socket.emit('room:join', kind, id, ack);
     const onDisconnect = () => setJoined(false);
 
     if (socket.connected) join();
@@ -66,8 +64,7 @@ export function useSocketRoom(kind: 'channel' | 'server', id: string, onJoined?:
       socket.off('connect', join);
       socket.off('disconnect', onDisconnect);
       setJoined(false);
-      if (kind === 'channel') socket.emit('channel:leave', id);
-      else socket.emit('server:leave', id);
+      socket.emit('room:leave', kind, id);
     };
   }, [socket, kind, id]);
 

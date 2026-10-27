@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ConfirmModal } from '@/components/modals/confirm-modal';
 import { UserAvatar } from '@/components/user/user-avatar';
+import { messageUrl, type ChatKind } from '@/lib/chat-target';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 import type { MessageDTO } from '@/lib/messages';
 import { cn } from '@/lib/utils';
@@ -21,6 +22,7 @@ const shortTime = new Intl.DateTimeFormat('tr-TR', { timeStyle: 'short' });
 const isImage = (url: string) => /\.(png|jpe?g|webp|gif)$/i.test(url);
 
 interface ChatItemProps {
+  kind: ChatKind;
   message: MessageDTO;
   currentUser: { id: string; role: MemberRole };
   /** Same author within a few minutes: render without avatar and name. */
@@ -28,7 +30,7 @@ interface ChatItemProps {
   onChanged: (message: MessageDTO) => void;
 }
 
-export function ChatItem({ message, currentUser, continuation, onChanged }: ChatItemProps) {
+export function ChatItem({ kind, message, currentUser, continuation, onChanged }: ChatItemProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
   const [saving, setSaving] = useState(false);
@@ -63,7 +65,7 @@ export function ChatItem({ message, currentUser, continuation, onChanged }: Chat
     setSaving(true);
     setError(null);
     try {
-      const updated = await apiFetch<MessageDTO>(`/api/messages/${message.id}`, {
+      const updated = await apiFetch<MessageDTO>(messageUrl(kind, message.id), {
         method: 'PATCH',
         body: JSON.stringify({ content: draft }),
       });
@@ -191,7 +193,7 @@ export function ChatItem({ message, currentUser, continuation, onChanged }: Chat
         description="Bu mesajı silmek istediğine emin misin?"
         confirmLabel="Sil"
         onConfirm={async () => {
-          const updated = await apiFetch<MessageDTO>(`/api/messages/${message.id}`, { method: 'DELETE' });
+          const updated = await apiFetch<MessageDTO>(messageUrl(kind, message.id), { method: 'DELETE' });
           onChanged(updated);
         }}
       />

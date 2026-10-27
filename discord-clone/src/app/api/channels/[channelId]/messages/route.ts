@@ -54,6 +54,6 @@ export async function POST(req: Request, { params }: Ctx) {
     select: messageSelect,
   });
   const message = toMessageDTO(row);
-  emitMessage('message:new', message);
+  emitMessage('channel', 'message:new', message);
   return NextResponse.json(message, { status: 201 });
 }

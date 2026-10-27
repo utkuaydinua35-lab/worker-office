@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { publicProfileSelect } from '@/lib/profile';
+import { broadcastPresence, emitUserProfileChanged } from '@/lib/socket/emit';
 import { profileUpdateSchema } from '@/lib/validators';
 
 export async function GET() {
@@ -39,6 +40,11 @@ export async function PATCH(req: Request) {
       data,
       select: publicProfileSelect,
     });
+    if (data.status !== undefined) await broadcastPresence(userId);
+    // Member lists and profile cards show these; let open server views re-render.
+    if (data.username !== undefined || data.bio !== undefined || data.customStatus !== undefined) {
+      await emitUserProfileChanged(userId);
+    }
     return NextResponse.json(user);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {

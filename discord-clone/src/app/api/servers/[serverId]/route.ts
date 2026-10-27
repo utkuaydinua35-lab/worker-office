@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { forbidden, invalid, jsonError, notFound, unauthorized } from '@/lib/api';
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { closeVoiceRooms } from '@/lib/livekit';
 import { canManageServer, getMembership } from '@/lib/membership';
 import { readServerIcon } from '@/lib/server-icon';
 import { closeServerRooms, emitServerUpdated } from '@/lib/socket/emit';
@@ -56,7 +57,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
 
   const server = await db.server.findUnique({
     where: { id: params.serverId },
-    include: { channels: { select: { id: true } } },
+    include: { channels: { select: { id: true, type: true } } },
   });
   if (!server || !(await getMembership(userId, server.id))) return notFound('Sunucu');
   if (server.ownerId !== userId) return forbidden();
@@ -69,6 +70,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
 
   await db.server.delete({ where: { id: server.id } });
   closeServerRooms(server.id, server.channels.map((c) => c.id));
+  await closeVoiceRooms(server.channels.filter((c) => c.type === 'VOICE').map((c) => c.id));
 
   await Promise.all([server.iconUrl, ...attachments.map((a) => a.fileUrl)].map(deleteUpload));
   return new NextResponse(null, { status: 204 });

@@ -21,6 +21,22 @@ export function roomService() {
 /** Room name for a voice channel. Channel ids are UUIDs, unique across servers. */
 export const voiceRoomName = (channelId: string) => channelId;
 
+/** Disconnects a user from the given voice channels (left or kicked). Best effort. */
+export async function removeFromVoiceRooms(userId: string, voiceChannelIds: string[]) {
+  const rooms = roomService();
+  if (!rooms) return;
+  await Promise.all(
+    voiceChannelIds.map((id) => rooms.removeParticipant(voiceRoomName(id), userId).catch(() => {})),
+  );
+}
+
+/** Ends the given voice channels' rooms for everyone (channel or server deleted). Best effort. */
+export async function closeVoiceRooms(voiceChannelIds: string[]) {
+  const rooms = roomService();
+  if (!rooms) return;
+  await Promise.all(voiceChannelIds.map((id) => rooms.deleteRoom(voiceRoomName(id)).catch(() => {})));
+}
+
 // Participant attributes (set in the token, updated by the mute API) that
 // other clients read: the server-mute icon, and who may moderate whom.
 export { OWNER_ATTRIBUTE, ROLE_ATTRIBUTE, SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';

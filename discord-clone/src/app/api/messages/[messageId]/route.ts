@@ -41,7 +41,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     select: messageSelect,
   });
   const message = toMessageDTO(row);
-  emitMessage('message:update', message);
+  emitMessage('channel', 'message:update', message);
   return NextResponse.json(message);
 }
 
@@ -63,6 +63,6 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   await deleteUpload(found.message.fileUrl);
 
   const message = toMessageDTO(row);
-  emitMessage('message:update', message);
+  emitMessage('channel', 'message:update', message);
   return NextResponse.json(message);
 }

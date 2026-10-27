@@ -1,12 +1,13 @@
 'use client';
 
 import type { MemberRole } from '@prisma/client';
-import { Hash, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import { ChatItem } from '@/components/chat/chat-item';
 import { Button } from '@/components/ui/button';
-import type { useChannelMessages } from '@/hooks/use-channel-messages';
+import type { useChatMessages } from '@/hooks/use-chat-messages';
+import type { ChatKind } from '@/lib/chat-target';
 
 const NEAR_BOTTOM_PX = 150;
 const LOAD_OLDER_AT_PX = 80;
@@ -14,12 +15,13 @@ const LOAD_OLDER_AT_PX = 80;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
 interface ChatMessagesProps {
-  channelName: string;
+  kind: ChatKind;
+  intro: React.ReactNode;
   currentUser: { id: string; role: MemberRole };
-  chat: ReturnType<typeof useChannelMessages>;
+  chat: ReturnType<typeof useChatMessages>;
 }
 
-export function ChatMessages({ channelName, currentUser, chat }: ChatMessagesProps) {
+export function ChatMessages({ kind, intro, currentUser, chat }: ChatMessagesProps) {
   const { messages, status, hasMore, loadingOlder, loadOlder, upsert, retry } = chat;
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -77,15 +79,7 @@ export function ChatMessages({ channelName, currentUser, chat }: ChatMessagesPro
           </div>
         )}
 
-        {status === 'ready' && !hasMore && (
-          <div className="px-4 pb-4 pt-8">
-            <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-secondary">
-              <Hash className="h-9 w-9" />
-            </div>
-            <h2 className="text-3xl font-bold">#{channelName} kanalına hoş geldin!</h2>
-            <p className="text-muted-foreground">Bu, #{channelName} kanalının başlangıcı.</p>
-          </div>
-        )}
+        {status === 'ready' && !hasMore && <div className="px-4 pb-4 pt-8">{intro}</div>}
         {loadingOlder && (
           <div className="flex justify-center py-2">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -102,6 +96,7 @@ export function ChatMessages({ channelName, currentUser, chat }: ChatMessagesPro
           return (
             <ChatItem
               key={message.id}
+              kind={kind}
               message={message}
               currentUser={currentUser}
               continuation={continuation}

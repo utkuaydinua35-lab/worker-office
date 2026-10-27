@@ -25,3 +25,21 @@ export function outranks(actor: RoleHolder, target: RoleHolder) {
 /** Server mute: MODERATOR or above, and only members the actor outranks. */
 export const canServerMute = (actor: RoleHolder, target: RoleHolder) =>
   (actor.isOwner || actor.role !== 'GUEST') && outranks(actor, target);
+
+/** Kick: same rule as server mute. */
+export const canKick = canServerMute;
+
+/**
+ * Role change: ADMIN (or the owner) over a member they outrank, and never to a
+ * role at or above their own — only the owner can make admins.
+ */
+export const canChangeRole = (actor: RoleHolder, target: RoleHolder, newRole?: MemberRole) =>
+  (actor.isOwner || actor.role === 'ADMIN') &&
+  outranks(actor, target) &&
+  (newRole === undefined || actor.isOwner || ROLE_RANK[newRole] < ROLE_RANK[actor.role]);
+
+/** Roles `actor` may hand out, highest first. */
+export const assignableRoles = (actor: RoleHolder): MemberRole[] =>
+  (['ADMIN', 'MODERATOR', 'GUEST'] as const).filter(
+    (r) => actor.isOwner || ROLE_RANK[r] < ROLE_RANK[actor.role],
+  );

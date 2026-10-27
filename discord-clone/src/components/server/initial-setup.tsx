@@ -13,7 +13,7 @@ export function InitialSetup({ username }: { username: string }) {
   const [joinOpen, setJoinOpen] = useState(false);
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex flex-1 items-center justify-center p-4">
       <div className="w-full max-w-md rounded-lg bg-card p-8 text-center">
         <h1 className="text-2xl font-bold">Hoş geldin, {username}!</h1>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -38,6 +38,6 @@ export function InitialSetup({ username }: { username: string }) {
       </div>
       <ServerFormModal mode="create" open={createOpen} onOpenChange={setCreateOpen} />
       <JoinServerModal open={joinOpen} onOpenChange={setJoinOpen} />
-    </main>
+    </div>
   );
 }

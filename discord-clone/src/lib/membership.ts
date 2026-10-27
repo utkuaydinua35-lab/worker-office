@@ -10,7 +10,7 @@ export function getMembership(userId: string, serverId: string) {
 export async function getChannelAccess(userId: string, channelId: string) {
   const channel = await db.channel.findUnique({
     where: { id: channelId },
-    include: { server: { select: { id: true, ownerId: true } } },
+    include: { server: { select: { id: true, name: true, ownerId: true } } },
   });
   if (!channel) return null;
   const member = await getMembership(userId, channel.serverId);

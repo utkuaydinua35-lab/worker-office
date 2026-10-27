@@ -4,6 +4,7 @@ import { jsonError, unauthorized } from '@/lib/api';
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { publicProfileSelect } from '@/lib/profile';
+import { emitUserProfileChanged } from '@/lib/socket/emit';
 import { deleteUpload, saveUpload, sniffMime } from '@/lib/storage';
 import { AVATAR_MAX_BYTES, AVATAR_MIME_TYPES } from '@/lib/validators';
 
@@ -32,6 +33,7 @@ export async function POST(req: Request) {
     select: publicProfileSelect,
   });
   await deleteUpload(previous?.avatarUrl);
+  await emitUserProfileChanged(userId);
 
   return NextResponse.json(user);
 }
@@ -47,6 +49,7 @@ export async function DELETE() {
     select: publicProfileSelect,
   });
   await deleteUpload(previous?.avatarUrl);
+  await emitUserProfileChanged(userId);
 
   return NextResponse.json(user);
 }

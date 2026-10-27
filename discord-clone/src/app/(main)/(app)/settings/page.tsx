@@ -16,6 +16,7 @@ export default async function SettingsPage() {
   if (!user) redirect('/login');
 
   return (
+    <div className="min-w-0 flex-1 overflow-y-auto">
     <main className="mx-auto max-w-2xl px-4 py-10">
       <div className="mb-8 flex items-center justify-between">
         <div>
@@ -31,5 +32,6 @@ export default async function SettingsPage() {
       </div>
       <ProfileSettingsForm initialProfile={toPublicProfile(user)} />
     </main>
+    </div>
   );
 }

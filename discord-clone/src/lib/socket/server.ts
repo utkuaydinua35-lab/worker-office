@@ -3,17 +3,19 @@ import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { decode } from 'next-auth/jwt';
 import { Server } from 'socket.io';
 
+import { isChatKind } from '@/lib/chat-target';
+import { isConversationParticipant } from '@/lib/conversation';
 import { getChannelAccess, getMembership } from '@/lib/membership';
+import { broadcastPresence, setIO, trackSocket, type TypedIO } from '@/lib/socket/emit';
 import {
-  channelRoom,
-  serverRoom,
+  roomName,
   SOCKET_PATH,
   userRoom,
   type ClientToServerEvents,
+  type RoomKind,
   type ServerToClientEvents,
   type SocketData,
 } from '@/lib/socket/events';
-import { setIO, type TypedIO } from '@/lib/socket/emit';
 
 const SESSION_COOKIES = ['__Secure-next-auth.session-token', 'next-auth.session-token'];
 
@@ -57,6 +59,14 @@ function isSameOrigin(req: IncomingMessage) {
   }
 }
 
+const isRoomKind = (value: unknown): value is RoomKind => value === 'server' || isChatKind(value);
+
+async function mayJoin(userId: string, kind: RoomKind, id: string) {
+  if (kind === 'channel') return !!(await getChannelAccess(userId, id));
+  if (kind === 'server') return !!(await getMembership(userId, id));
+  return isConversationParticipant(userId, id);
+}
+
 export function attachSocketServer(httpServer: HttpServer): TypedIO {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) throw new Error('NEXTAUTH_SECRET is required for the Socket.io server');
@@ -83,36 +93,30 @@ export function attachSocketServer(httpServer: HttpServer): TypedIO {
 
   io.on('connection', (socket) => {
     const { userId } = socket.data;
-    // Personal room: lets the server pull this user out of rooms they lose
-    // access to (leaving a server, server deletion).
+    // Personal room: DM notifications, presence of DM partners, and a handle to
+    // pull this user out of rooms they lose access to.
     void socket.join(userRoom(userId));
+    if (trackSocket(userId, 1)) void broadcastPresence(userId);
 
-    socket.on('channel:join', async (channelId, ack) => {
-      const ok = typeof channelId === 'string' && !!(await getChannelAccess(userId, channelId));
-      if (ok) await socket.join(channelRoom(channelId));
+    socket.on('room:join', async (kind, id, ack) => {
+      const ok = isRoomKind(kind) && typeof id === 'string' && (await mayJoin(userId, kind, id));
+      if (ok) await socket.join(roomName(kind, id));
       if (typeof ack === 'function') ack(ok);
     });
 
-    socket.on('channel:leave', (channelId) => {
-      if (typeof channelId === 'string') void socket.leave(channelRoom(channelId));
-    });
-
-    socket.on('server:join', async (serverId, ack) => {
-      const ok = typeof serverId === 'string' && !!(await getMembership(userId, serverId));
-      if (ok) await socket.join(serverRoom(serverId));
-      if (typeof ack === 'function') ack(ok);
-    });
-
-    socket.on('server:leave', (serverId) => {
-      if (typeof serverId === 'string') void socket.leave(serverRoom(serverId));
+    socket.on('room:leave', (kind, id) => {
+      if (isRoomKind(kind) && typeof id === 'string') void socket.leave(roomName(kind, id));
     });
 
     socket.on('typing', (payload) => {
-      const channelId = payload?.channelId;
+      const { kind, roomId } = payload ?? {};
+      if (!isChatKind(kind) || typeof roomId !== 'string') return;
+      const room = roomName(kind, roomId);
       // Only rooms the membership check let us into.
-      if (typeof channelId !== 'string' || !socket.rooms.has(channelRoom(channelId))) return;
-      socket.to(channelRoom(channelId)).emit('typing', {
-        channelId,
+      if (!socket.rooms.has(room)) return;
+      socket.to(room).emit('typing', {
+        kind,
+        roomId,
         userId,
         username: socket.data.username,
         typing: payload.typing === true,
@@ -122,15 +126,14 @@ export function attachSocketServer(httpServer: HttpServer): TypedIO {
     // Clear this user's typing indicator everywhere when the tab goes away.
     socket.on('disconnecting', () => {
       for (const room of socket.rooms) {
-        if (!room.startsWith('channel:')) continue;
-        const channelId = room.slice('channel:'.length);
-        socket.to(room).emit('typing', {
-          channelId,
-          userId,
-          username: socket.data.username,
-          typing: false,
-        });
+        const [kind, roomId] = room.split(':');
+        if (!isChatKind(kind) || !roomId) continue;
+        socket.to(room).emit('typing', { kind, roomId, userId, username: socket.data.username, typing: false });
       }
+    });
+
+    socket.on('disconnect', () => {
+      if (trackSocket(userId, -1)) void broadcastPresence(userId);
     });
   });
 

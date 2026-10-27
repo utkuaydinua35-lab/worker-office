@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useSocket, useSocketRoom } from '@/components/providers/socket-provider';
+import { messagesUrl, type ChatTarget } from '@/lib/chat-target';
 import { apiFetch } from '@/lib/client-api';
 import type { MessageDTO, MessagePage } from '@/lib/messages';
 import type { TypingPayload } from '@/lib/socket/events';
@@ -30,8 +31,12 @@ export interface TypingUser {
   username: string;
 }
 
-/** Messages of one channel (oldest → newest), live via Socket.io, older pages on demand. */
-export function useChannelMessages(channelId: string, currentUserId: string) {
+/**
+ * Messages of one chat — a channel or a DM conversation — oldest → newest,
+ * live via Socket.io, older pages on demand.
+ */
+export function useChatMessages(target: ChatTarget, currentUserId: string) {
+  const { kind, id } = target;
   const { socket } = useSocket();
   const [messages, setMessages] = useState<MessageDTO[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -47,7 +52,7 @@ export function useChannelMessages(channelId: string, currentUserId: string) {
 
   const loadLatest = useCallback(async () => {
     try {
-      const page = await apiFetch<MessagePage>(`/api/channels/${channelId}/messages`);
+      const page = await apiFetch<MessagePage>(messagesUrl({ kind, id }));
       setMessages((current) => merge(current, page.items));
       // Once older pages are loaded, the cursor points further back; keep it.
       if (!olderLoaded.current) setNextCursor(page.nextCursor);
@@ -55,14 +60,14 @@ export function useChannelMessages(channelId: string, currentUserId: string) {
     } catch {
       setStatus((s) => (s === 'loading' ? 'error' : s));
     }
-  }, [channelId]);
+  }, [kind, id]);
 
   const loadOlder = useCallback(async () => {
     if (!nextCursor || loadingOlder) return;
     setLoadingOlder(true);
     try {
       const page = await apiFetch<MessagePage>(
-        `/api/channels/${channelId}/messages?cursor=${encodeURIComponent(nextCursor)}`,
+        `${messagesUrl({ kind, id })}?cursor=${encodeURIComponent(nextCursor)}`,
       );
       olderLoaded.current = true;
       setMessages((current) => merge(current, page.items));
@@ -70,9 +75,9 @@ export function useChannelMessages(channelId: string, currentUserId: string) {
     } finally {
       setLoadingOlder(false);
     }
-  }, [channelId, nextCursor, loadingOlder]);
+  }, [kind, id, nextCursor, loadingOlder]);
 
-  // Reset when switching channels.
+  // Reset when switching chats.
   useEffect(() => {
     setMessages([]);
     setNextCursor(null);
@@ -84,7 +89,7 @@ export function useChannelMessages(channelId: string, currentUserId: string) {
 
   // Every (re)join re-fetches the newest page: covers messages sent between the
   // first fetch and the join, and anything missed while disconnected.
-  const live = useSocketRoom('channel', channelId, () => void loadLatest());
+  const live = useSocketRoom(kind, id, () => void loadLatest());
 
   useEffect(() => {
     if (!socket) return;
@@ -102,12 +107,12 @@ export function useChannelMessages(channelId: string, currentUserId: string) {
     };
 
     const onMessage = (m: MessageDTO) => {
-      if (m.channelId !== channelId) return;
+      if (m.roomId !== id) return;
       upsert(m);
       clearTyping(m.user.id); // they just sent it
     };
     const onTyping = (p: TypingPayload) => {
-      if (p.channelId !== channelId || p.userId === currentUserId) return;
+      if (p.kind !== kind || p.roomId !== id || p.userId === currentUserId) return;
       if (!p.typing) return clearTyping(p.userId);
       setTyping((prev) => new Map(prev).set(p.userId, { userId: p.userId, username: p.username }));
       clearTimeout(timers.get(p.userId));
@@ -125,7 +130,7 @@ export function useChannelMessages(channelId: string, currentUserId: string) {
       timers.forEach(clearTimeout);
       timers.clear();
     };
-  }, [socket, channelId, currentUserId, upsert]);
+  }, [socket, kind, id, currentUserId, upsert]);
 
   return {
     messages,

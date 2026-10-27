@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { forbidden, invalid, notFound, readJson, unauthorized } from '@/lib/api';
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { closeVoiceRooms } from '@/lib/livekit';
 import { canManageChannels, getChannelAccess } from '@/lib/membership';
 import { closeChannelRoom, emitServerUpdated } from '@/lib/socket/emit';
 import { deleteUpload } from '@/lib/storage';
@@ -44,6 +45,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   });
   await db.channel.delete({ where: { id: params.channelId } });
   closeChannelRoom(access.channel.serverId, params.channelId);
+  if (access.channel.type === 'VOICE') await closeVoiceRooms([params.channelId]);
 
   await Promise.all(attachments.map((a) => deleteUpload(a.fileUrl)));
   return new NextResponse(null, { status: 204 });

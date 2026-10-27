@@ -1,8 +1,9 @@
 import { NavigationActions } from '@/components/navigation/navigation-actions';
+import { NavigationDmButton } from '@/components/navigation/navigation-dm-button';
 import { NavigationItem } from '@/components/navigation/navigation-item';
 import { db } from '@/lib/db';
 
-/** Far-left column: one icon per server the user belongs to, plus create/join. */
+/** Far-left column: DM home, one icon per server the user belongs to, plus create/join. */
 export async function NavigationSidebar({ userId }: { userId: string }) {
   const memberships = await db.member.findMany({
     where: { userId },
@@ -12,6 +13,8 @@ export async function NavigationSidebar({ userId }: { userId: string }) {
 
   return (
     <nav className="flex h-full w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto bg-[#1e1f22] py-3">
+      <NavigationDmButton />
+      <div className="mx-auto h-0.5 w-8 rounded bg-border" />
       {memberships.map(({ server }) => (
         <NavigationItem key={server.id} {...server} />
       ))}

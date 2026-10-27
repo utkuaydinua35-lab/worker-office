@@ -9,7 +9,7 @@ Pixel Agents'tan bağımsız bir proje; kök `package.json` workspace'lerine dah
 | 1     | Veritabanı şeması, kayıt/giriş, profil ve avatar                       | ✅    |
 | 2     | Sunucu/kanal yönetimi, davet, gerçek zamanlı mesajlaşma, dosya, emoji | ✅    |
 | 3     | Ses/görüntü odaları, ekran paylaşımı, kullanıcı ses ayarları (LiveKit) | ✅    |
-| 4     | Discord yerleşimi, üye listesi, profil kartı, context menu            | —     |
+| 4     | Discord yerleşimi, üye listesi, profil kartı, sağ tık menüsü, DM      | ✅    |
 | 5     | Müzik botu                                                            | —     |
 
 ## Kurulum
@@ -44,7 +44,7 @@ src/app/api/...                 Tüm değişiklikler REST üzerinden (doğrulama
 
 Mesaj gönderme/düzenleme/silme **REST** ile yapılır; sunucu kaydı yazar, ardından Socket.io ile kanal odasına yayınlar. Böylece doğrulama ve yetki tek yerde kalır, socket yalnızca dağıtım kanalıdır. İstemci aynı mesajı POST cevabından, socket yankısından ve yeniden yüklemeden alabilir; `id` ile birleştirilir.
 
-**Odalar:** `channel:<id>` (mesajlar, yazıyor), `server:<id>` (kanal/ayar/üyelik değişince `server:updated` → sayfa yenilenir), `user:<id>` (sunucudan ayrılınca o kullanıcının socket'leri odalardan çıkarılır). Odaya katılım her seferinde üyelik kontrolünden geçer; yeniden bağlanınca odalara tekrar katılınır ve kaçırılan mesajlar çekilir.
+**Odalar:** `channel:<id>` ve `conversation:<id>` (mesajlar, yazıyor), `server:<id>` (kanal/ayar/üyelik değişince `server:updated` → sayfa yenilenir; çevrimiçi durumu), `user:<id>` (DM bildirimleri, DM partnerlerinin durumu; sunucudan ayrılınca/atılınca o kullanıcının socket'leri odalardan çıkarılır). Odaya katılım her seferinde üyelik kontrolünden geçer; yeniden bağlanınca odalara tekrar katılınır ve kaçırılan mesajlar çekilir.
 
 **Socket güvenliği:** Bağlantı NextAuth oturum çerezini çözerek kimlik doğrular. Tarayıcılar çapraz site WebSocket el sıkışmalarına çerez eklediği için farklı `Origin`'den gelen bağlantılar reddedilir.
 
@@ -66,6 +66,16 @@ src/components/voice/
 - **Yerel susturma** yalnızca senin duyduğunu keser; **sunucuda susturma** LiveKit'in kendisinde o kişinin mikrofon yayın iznini kaldırır, yani istemciye güvenmez. Bayrak `Member.serverMuted`'da durur, token her katılımda ondan üretildiği için çıkıp girmek susturmayı kaldırmaz. Diğer katılımcılar durumu LiveKit participant attribute'larından görür.
 - Rol değişikliği, kişi kanala tekrar girene kadar LiveKit attribute'larına yansımaz; yetkiyi yine de sunucu tarafı kontrol eder.
 
+## Arayüz ve etkileşimler (Aşama 4)
+
+- **Yerleşim:** sol sunucu çubuğu (en üstte DM butonu) → kanal listesi ve altta kullanıcı paneli (mikrofon, kulaklık, ayarlar) → sohbet/ses alanı → sağda üye listesi (geniş ekranlarda).
+- **Kalıcı ses bağlantısı:** LiveKit odası `src/components/providers/voice-provider.tsx` içinde, sayfaların üstünde yaşar. Metin kanallarına, başka sunuculara, DM'lere veya ayarlara geçmek bağlantıyı koparmaz; kullanıcı panelindeki "Ses Bağlandı" kutusundan çıkılır.
+- **Mikrofon / kulaklık:** Discord mantığı: sağırlaştırma mikrofonu da kapatır, kaldırınca önceki susturma durumuna döner. Sunucu susturması kalkınca kendini susturmamışsan mikrofon kendiliğinden açılır. Tercihler tarayıcıda saklanır.
+- **Gerçek çevrimiçi durumu:** Socket.io bağlantısı olmayan kullanıcı çevrimdışı görünür (sekme kapanınca anında); bağlıysa seçtiği durum (Görünmez = çevrimdışı). Değişiklikler sunucu üyelerine ve DM partnerlerine canlı yayınlanır.
+- **Üye listesi:** çevrimiçiler role göre (Yöneticiler, Moderatörler, Çevrimiçi), sonra çevrimdışılar. Tıklayınca profil kartı (avatar, durum, hakkımda, üyelik tarihleri, rol, Mesaj Gönder).
+- **Sağ tık menüsü:** Profil, Mesaj Gönder, kullanıcı ses seviyesi (%0–200) ve yerel susturma (ses odasındaki kart menüsüyle senkron), yetkiye göre Sunucuda Sustur, Rol ve Sunucudan At.
+- **DM:** yalnızca ortak bir sunucuda olduğun kişilere (arkadaş listesi yok). Kanal sohbetiyle aynı bileşenler: canlı mesaj, yazıyor, düzenle/sil, ek, emoji.
+
 ## Yetkiler
 
 | İşlem                                       | GUEST | MODERATOR | ADMIN | Sahip |
@@ -76,9 +86,10 @@ src/components/voice/
 | Sunucu adı/simgesi, davet bağlantısını yenile |       |           |  ✅   |  ✅   |
 | Sunucuyu sil                                 |       |           |       |  ✅   |
 | Sunucudan ayrıl                              |  ✅   |    ✅     |  ✅   |       |
-| Sunucuda sustur (yalnızca alt roldekileri)    |       |    ✅     |  ✅   |  ✅   |
+| Sunucuda sustur / at (yalnızca alt roldekileri) |     |    ✅     |  ✅   |  ✅   |
+| Rol ver (yalnızca kendi rolünün altını)       |       |           |  ✅   |  ✅   |
 
-Sunucuyu oluşturan kişi ADMIN ve sahip olur; davetle katılanlar GUEST. Rol değiştirme Aşama 4'teki üye menüsüyle gelecek.
+Sunucuyu oluşturan kişi ADMIN ve sahip olur; davetle katılanlar GUEST. Roller üye listesindeki sağ tık menüsünden verilir; yalnızca sahip yönetici atayabilir.
 
 ## API
 
@@ -100,6 +111,10 @@ Sunucuyu oluşturan kişi ADMIN ve sahip olur; davetle katılanlar GUEST. Rol de
 | POST   | `/api/uploads`                         | Ek yükle (görsel veya PDF, ≤ 8 MB) → `{ url }`         |
 | GET    | `/api/livekit/token?channelId=`        | Ses kanalı token'ı → `{ token, url, serverMuted }`     |
 | POST   | `/api/servers/:id/voice-mute`          | `{ userId, muted }` sunucuda susturma                  |
+| PATCH  | `/api/servers/:id/members/:userId` · DELETE | `{ role }` rol değiştir · sunucudan at            |
+| POST   | `/api/conversations`                   | `{ userId }` → DM konuşmasını aç `{ id }`              |
+| GET    | `/api/conversations/:id/messages` · POST | DM mesajları (kanal mesajlarıyla aynı biçim)         |
+| PATCH  | `/api/direct-messages/:id` · DELETE    | DM düzenle · sil (yalnızca yazan)                      |
 
 ## Dosya depolama (`src/lib/storage.ts`)
 

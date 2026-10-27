@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import { EmojiPicker } from '@/components/chat/emoji-picker';
 import { useSocket } from '@/components/providers/socket-provider';
-import type { TypingUser } from '@/hooks/use-channel-messages';
+import type { TypingUser } from '@/hooks/use-chat-messages';
+import { messagesUrl, type ChatTarget } from '@/lib/chat-target';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 import type { MessageDTO } from '@/lib/messages';
 import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MIME_TYPES, MESSAGE_MAX_LENGTH } from '@/lib/validators';
@@ -22,7 +23,8 @@ interface Attachment {
 }
 
 interface ChatInputProps {
-  channel: { id: string; name: string };
+  target: ChatTarget;
+  placeholder: string;
   onSent: (message: MessageDTO) => void;
   typingUsers: TypingUser[];
 }
@@ -34,7 +36,7 @@ function typingLabel(users: TypingUser[]) {
   return <>Birkaç kişi yazıyor...</>;
 }
 
-export function ChatInput({ channel, onSent, typingUsers }: ChatInputProps) {
+export function ChatInput({ target, placeholder, onSent, typingUsers }: ChatInputProps) {
   const { socket } = useSocket();
   const [content, setContent] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -49,7 +51,7 @@ export function ChatInput({ channel, onSent, typingUsers }: ChatInputProps) {
   function stopTyping() {
     clearTimeout(idleTimer.current);
     if (lastTypingSent.current) {
-      socket?.emit('typing', { channelId: channel.id, typing: false });
+      socket?.emit('typing', { kind: target.kind, roomId: target.id, typing: false });
       lastTypingSent.current = 0;
     }
   }
@@ -57,15 +59,15 @@ export function ChatInput({ channel, onSent, typingUsers }: ChatInputProps) {
   function announceTyping() {
     const now = Date.now();
     if (now - lastTypingSent.current > TYPING_THROTTLE_MS) {
-      socket?.emit('typing', { channelId: channel.id, typing: true });
+      socket?.emit('typing', { kind: target.kind, roomId: target.id, typing: true });
       lastTypingSent.current = now;
     }
     clearTimeout(idleTimer.current);
     idleTimer.current = setTimeout(stopTyping, TYPING_IDLE_MS);
   }
 
-  // Leaving the channel (or unmounting) ends the typing state.
-  useEffect(() => stopTyping, [channel.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Leaving the chat (or unmounting) ends the typing state.
+  useEffect(() => stopTyping, [target.kind, target.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Grow with the content up to a cap, like Discord.
   useEffect(() => {
@@ -101,7 +103,7 @@ export function ChatInput({ channel, onSent, typingUsers }: ChatInputProps) {
     setSending(true);
     setError(null);
     try {
-      const message = await apiFetch<MessageDTO>(`/api/channels/${channel.id}/messages`, {
+      const message = await apiFetch<MessageDTO>(messagesUrl(target), {
         method: 'POST',
         body: JSON.stringify({ content: text, fileUrl: attachment?.url ?? null }),
       });
@@ -183,7 +185,7 @@ export function ChatInput({ channel, onSent, typingUsers }: ChatInputProps) {
           rows={1}
           value={content}
           maxLength={MESSAGE_MAX_LENGTH}
-          placeholder={`#${channel.name} kanalına mesaj gönder`}
+          placeholder={placeholder}
           aria-label="Mesaj"
           onChange={(e) => {
             setContent(e.target.value);
