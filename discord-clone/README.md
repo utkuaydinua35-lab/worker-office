@@ -1,52 +1,83 @@
-# Discord Clone — Aşama 1: Veritabanı, Kimlik Doğrulama ve Profil
+# Discord Clone
 
 Pixel Agents'tan bağımsız bir proje; kök `package.json` workspace'lerine dahil değildir.
 
-**Yığın:** Next.js 14 (App Router) · TypeScript · Prisma 5 · PostgreSQL · NextAuth v4 (Credentials + JWT) · Tailwind CSS · Shadcn UI (Radix)
+**Yığın:** Next.js 14 (App Router) · TypeScript · Prisma 5 · PostgreSQL · NextAuth v4 (Credentials + JWT) · Socket.io 4 · Tailwind CSS · Shadcn UI (Radix) · emoji-mart
+
+| Aşama | Kapsam                                                                | Durum |
+| ----- | --------------------------------------------------------------------- | ----- |
+| 1     | Veritabanı şeması, kayıt/giriş, profil ve avatar                       | ✅    |
+| 2     | Sunucu/kanal yönetimi, davet, gerçek zamanlı mesajlaşma, dosya, emoji | ✅    |
+| 3     | Ses/görüntü odaları (LiveKit)                                         | —     |
+| 4     | Discord yerleşimi, üye listesi, profil kartı, context menu            | —     |
+| 5     | Müzik botu                                                            | —     |
 
 ## Kurulum
 
 ```bash
 cd discord-clone
-cp .env.example .env          # DATABASE_URL ve NEXTAUTH_SECRET'ı doldurun
-npm install                   # postinstall → prisma generate
-npx prisma migrate dev --name init
-npm run dev                   # http://localhost:3000
+cp .env.example .env
+npm install
+npx prisma migrate dev
+npm run dev
 ```
 
-## Veritabanı modeli (`prisma/schema.prisma`)
+`.env` içinde `DATABASE_URL` ve `NEXTAUTH_SECRET` doldurulmalı (`openssl rand -base64 32`). Ardından http://localhost:3000 adresini açın.
 
-| Model           | Amaç                                                                            |
-| --------------- | ------------------------------------------------------------------------------- |
-| `User`          | Hesap + profil (`avatarUrl`, `bio`, `status`, `customStatus`); şifre bcrypt hash |
-| `Server`        | Sunucu/lonca; `inviteCode` benzersiz, `ownerId` → User                           |
-| `Member`        | User ↔ Server bağlantısı + `role` (ADMIN/MODERATOR/GUEST); `(userId, serverId)` benzersiz |
-| `Channel`       | `TEXT` veya `VOICE`, bir Server'a ait                                            |
-| `Message`       | Kanal mesajı; `deleted` ile yumuşak silme                                        |
-| `Conversation`  | İki kullanıcı arası DM odası; `(userOneId, userTwoId)` sıralı ve benzersiz       |
-| `DirectMessage` | Conversation içindeki mesaj                                                     |
+> **`npm run dev` kullanın, `next dev` değil.** Socket.io sunucusu `server.ts` içindeki özel HTTP sunucusunda çalışır; `next dev` ile sayfalar açılır ama mesajlar canlı gelmez. Production: `npm run build && npm start`.
 
-İlişki kuralları:
+## Mimari
 
-- Bir Server, Member, Channel veya User silinince bağlı kayıtlar `onDelete: Cascade` ile silinir.
-- `Conversation` katılımcıları her zaman sıralı saklanır (`src/lib/conversation.ts` → `getOrCreateConversation`), böylece A↔B ve B↔A aynı satıra düşer.
-- Mesaj tabloları `(channelId|conversationId, createdAt)` indeksli; Aşama 2'deki cursor sayfalama için.
+```
+server.ts                       Next.js + Socket.io aynı HTTP sunucusu / portta
+src/lib/socket/
+  events.ts                     İstemci ↔ sunucu olay tipleri (paylaşılan)
+  server.ts                     Socket.io: oturum çerezinden JWT doğrulama, oda yetkisi, "yazıyor"
+  emit.ts                       Route Handler'ların yayın yaptığı yardımcılar
+src/app/api/...                 Tüm değişiklikler REST üzerinden (doğrulama + yetki), ardından yayın
+```
+
+Mesaj gönderme/düzenleme/silme **REST** ile yapılır; sunucu kaydı yazar, ardından Socket.io ile kanal odasına yayınlar. Böylece doğrulama ve yetki tek yerde kalır, socket yalnızca dağıtım kanalıdır. İstemci aynı mesajı POST cevabından, socket yankısından ve yeniden yüklemeden alabilir; `id` ile birleştirilir.
+
+**Odalar:** `channel:<id>` (mesajlar, yazıyor), `server:<id>` (kanal/ayar/üyelik değişince `server:updated` → sayfa yenilenir), `user:<id>` (sunucudan ayrılınca o kullanıcının socket'leri odalardan çıkarılır). Odaya katılım her seferinde üyelik kontrolünden geçer; yeniden bağlanınca odalara tekrar katılınır ve kaçırılan mesajlar çekilir.
+
+**Socket güvenliği:** Bağlantı NextAuth oturum çerezini çözerek kimlik doğrular. Tarayıcılar çapraz site WebSocket el sıkışmalarına çerez eklediği için farklı `Origin`'den gelen bağlantılar reddedilir.
+
+## Yetkiler
+
+| İşlem                                       | GUEST | MODERATOR | ADMIN | Sahip |
+| ------------------------------------------- | :---: | :-------: | :---: | :---: |
+| Mesaj gönder, kendi mesajını düzenle/sil     |  ✅   |    ✅     |  ✅   |  ✅   |
+| Başkasının mesajını sil                      |       |    ✅     |  ✅   |  ✅   |
+| Kanal oluştur / düzenle / sil                |       |    ✅     |  ✅   |  ✅   |
+| Sunucu adı/simgesi, davet bağlantısını yenile |       |           |  ✅   |  ✅   |
+| Sunucuyu sil                                 |       |           |       |  ✅   |
+| Sunucudan ayrıl                              |  ✅   |    ✅     |  ✅   |       |
+
+Sunucuyu oluşturan kişi ADMIN ve sahip olur; davetle katılanlar GUEST. Rol değiştirme Aşama 4'teki üye menüsüyle gelecek.
 
 ## API
 
-| Method | Yol                        | Açıklama                                                     |
-| ------ | -------------------------- | ------------------------------------------------------------ |
-| POST   | `/api/auth/register`       | Kayıt (zod doğrulama, 409 = kullanıcı adı/e-posta alınmış)    |
-| *      | `/api/auth/[...nextauth]`  | NextAuth (giriş/çıkış/oturum)                                |
-| GET    | `/api/profile`             | Oturumdaki kullanıcının profili                              |
-| PATCH  | `/api/profile`             | `username`, `bio`, `status`, `customStatus` (yalnızca değişenler) |
-| POST   | `/api/profile/avatar`      | `multipart/form-data` `file` — PNG/JPEG/WEBP/GIF, ≤ 2 MB      |
-| DELETE | `/api/profile/avatar`      | Avatarı kaldır                                               |
+| Method | Yol                                    | Açıklama                                               |
+| ------ | -------------------------------------- | ------------------------------------------------------ |
+| POST   | `/api/auth/register`                   | Kayıt                                                  |
+| GET    | `/api/profile` · PATCH                 | Profil okuma / güncelleme                              |
+| POST   | `/api/profile/avatar` · DELETE         | Avatar yükleme / kaldırma                              |
+| POST   | `/api/servers`                         | Sunucu oluştur (multipart: `name`, `icon?`) + `#genel` |
+| PATCH  | `/api/servers/:id` · DELETE            | Ad/simge düzenle · sunucuyu sil                        |
+| POST   | `/api/servers/:id/invite-code`         | Davet kodunu yenile                                    |
+| POST   | `/api/servers/:id/leave`               | Sunucudan ayrıl                                        |
+| POST   | `/api/servers/:id/channels`            | Kanal oluştur `{ name, type }`                         |
+| PATCH  | `/api/channels/:id` · DELETE           | Kanalı yeniden adlandır · sil                          |
+| GET    | `/api/channels/:id/messages?cursor=`   | En yeniden eskiye 50'lik sayfalar                      |
+| POST   | `/api/channels/:id/messages`           | `{ content, fileUrl? }`                                |
+| PATCH  | `/api/messages/:id` · DELETE           | Düzenle · sil (yumuşak silme)                          |
+| POST   | `/api/invite/:code`                    | Davetle katıl                                          |
+| POST   | `/api/uploads`                         | Ek yükle (görsel veya PDF, ≤ 8 MB) → `{ url }`         |
 
-Tüm API'ler oturumu kendileri kontrol eder ve 401 JSON döner; sayfalar `src/middleware.ts` ile `/login`'e yönlendirilir.
+## Dosya depolama (`src/lib/storage.ts`)
 
-## Notlar
-
-- **Avatar depolama** yerel diske yapılır (`uploads/avatars/`, `public/` dışında, çünkü `next start` build sonrası eklenen `public/` dosyalarını servis etmez) ve `/uploads/avatars/[file]` route'u ile sunulur. Dosya tipi istemcinin MIME iddiasına değil, magic byte'lara bakılarak belirlenir; dosya adını sunucu üretir. Aşama 2'de Uploadthing/Cloudinary'ye geçilecek — yalnızca `src/lib/avatar-storage.ts` ve iki route değişir.
-- **Durum:** giriş yapınca `OFFLINE` → `ONLINE` olur (seçilmiş IDLE/DND korunur), çıkışta `OFFLINE`. Gerçek zamanlı varlık (presence) Aşama 2'de Socket.io ile gelecek.
-- Kullanıcı adı/avatar JWT'de taşınır; profil kaydından sonra istemci `useSession().update()` çağırır ve sunucu değerleri veritabanından yeniden okur.
+- `CLOUDINARY_*` değişkenleri doluysa dosyalar **Cloudinary**'ye, boşsa yerel diskte `uploads/` klasörüne gider (`/uploads/[folder]/[file]` route'u ile sunulur).
+- Dosya tipi istemcinin MIME iddiasına değil, magic byte'lara bakılarak belirlenir; dosya adını sunucu üretir.
+- Mesaj API'si yalnızca `/api/uploads`'ın ürettiği URL'leri kabul eder; başka sitelerden link (izleme pikseli, `javascript:`) kaydedilemez.
+- Mesaj, kanal veya sunucu silinince ekleri de silinir. Yüklenip hiç gönderilmeyen ekler şimdilik temizlenmiyor.
