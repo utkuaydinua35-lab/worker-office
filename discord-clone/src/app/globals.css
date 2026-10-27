@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Discord-like dark palette (HSL triplets for Tailwind's hsl(var(--x))). */
+:root {
+  --background: 220 7% 18%;
+  --foreground: 210 9% 87%;
+  --card: 223 7% 20%;
+  --card-foreground: 210 9% 87%;
+  --popover: 220 8% 8%;
+  --popover-foreground: 210 9% 87%;
+  --primary: 235 86% 65%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 6% 25%;
+  --secondary-foreground: 210 9% 87%;
+  --muted: 220 6% 25%;
+  --muted-foreground: 214 8% 61%;
+  --destructive: 359 87% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 6% 26%;
+  --input: 220 6% 26%;
+  --ring: 235 86% 65%;
+  --radius: 0.5rem;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
