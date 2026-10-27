@@ -1,6 +1,6 @@
-import type { MemberRole } from '@prisma/client';
-
 import { db } from '@/lib/db';
+
+export { canManageChannels, canManageServer, canModerateMessages, canServerMute } from '@/lib/roles';
 
 export function getMembership(userId: string, serverId: string) {
   return db.member.findUnique({ where: { userId_serverId: { userId, serverId } } });
@@ -17,7 +17,3 @@ export async function getChannelAccess(userId: string, channelId: string) {
   if (!member) return null;
   return { channel, member };
 }
-
-export const canManageServer = (role: MemberRole) => role === 'ADMIN';
-export const canManageChannels = (role: MemberRole) => role === 'ADMIN' || role === 'MODERATOR';
-export const canModerateMessages = (role: MemberRole) => role === 'ADMIN' || role === 'MODERATOR';

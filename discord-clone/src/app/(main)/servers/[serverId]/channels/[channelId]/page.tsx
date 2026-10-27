@@ -1,8 +1,8 @@
-import { Volume2 } from 'lucide-react';
 import { redirect } from 'next/navigation';
 
 import { ChatHeader } from '@/components/chat/chat-header';
 import { ChatRoom } from '@/components/chat/chat-room';
+import { VoiceRoomLoader } from '@/components/voice/voice-room-loader';
 import { getCurrentUserId } from '@/lib/auth';
 import { getChannelAccess } from '@/lib/membership';
 
@@ -29,10 +29,12 @@ export default async function ChannelPage({
           currentUser={{ id: userId, role: member.role }}
         />
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-muted-foreground">
-          <Volume2 className="h-12 w-12" />
-          <p>Sesli ve görüntülü odalar Aşama 3&apos;te (LiveKit) eklenecek.</p>
-        </div>
+        <VoiceRoomLoader
+          key={channel.id}
+          channel={{ id: channel.id, name: channel.name }}
+          serverId={params.serverId}
+          currentUser={{ id: userId, role: member.role, isOwner: channel.server.ownerId === userId }}
+        />
       )}
     </>
   );

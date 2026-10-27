@@ -2,13 +2,13 @@
 
 Pixel Agents'tan bağımsız bir proje; kök `package.json` workspace'lerine dahil değildir.
 
-**Yığın:** Next.js 14 (App Router) · TypeScript · Prisma 5 · PostgreSQL · NextAuth v4 (Credentials + JWT) · Socket.io 4 · Tailwind CSS · Shadcn UI (Radix) · emoji-mart
+**Yığın:** Next.js 14 (App Router) · TypeScript · Prisma 5 · PostgreSQL · NextAuth v4 (Credentials + JWT) · Socket.io 4 · LiveKit (SFU) · Tailwind CSS · Shadcn UI (Radix) · emoji-mart
 
 | Aşama | Kapsam                                                                | Durum |
 | ----- | --------------------------------------------------------------------- | ----- |
 | 1     | Veritabanı şeması, kayıt/giriş, profil ve avatar                       | ✅    |
 | 2     | Sunucu/kanal yönetimi, davet, gerçek zamanlı mesajlaşma, dosya, emoji | ✅    |
-| 3     | Ses/görüntü odaları (LiveKit)                                         | —     |
+| 3     | Ses/görüntü odaları, ekran paylaşımı, kullanıcı ses ayarları (LiveKit) | ✅    |
 | 4     | Discord yerleşimi, üye listesi, profil kartı, context menu            | —     |
 | 5     | Müzik botu                                                            | —     |
 
@@ -23,6 +23,11 @@ npm run dev
 ```
 
 `.env` içinde `DATABASE_URL` ve `NEXTAUTH_SECRET` doldurulmalı (`openssl rand -base64 32`). Ardından http://localhost:3000 adresini açın.
+
+Ses kanalları için bir LiveKit sunucusu gerekir (yoksa metin tarafı yine çalışır, ses kanalında uyarı görünür):
+
+- **Yerel:** `brew install livekit` → `livekit-server --dev`. `.env.example`'daki varsayılanlar (`ws://localhost:7880`, `devkey` / `secret`) bununla eşleşir.
+- **LiveKit Cloud:** https://cloud.livekit.io'da proje açın; proje URL'sini `NEXT_PUBLIC_LIVEKIT_URL`'e, API anahtar çiftini `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`'a yazın.
 
 > **`npm run dev` kullanın, `next dev` değil.** Socket.io sunucusu `server.ts` içindeki özel HTTP sunucusunda çalışır; `next dev` ile sayfalar açılır ama mesajlar canlı gelmez. Production: `npm run build && npm start`.
 
@@ -43,6 +48,24 @@ Mesaj gönderme/düzenleme/silme **REST** ile yapılır; sunucu kaydı yazar, ar
 
 **Socket güvenliği:** Bağlantı NextAuth oturum çerezini çözerek kimlik doğrular. Tarayıcılar çapraz site WebSocket el sıkışmalarına çerez eklediği için farklı `Origin`'den gelen bağlantılar reddedilir.
 
+## Ses ve görüntü (Aşama 3)
+
+```
+src/app/api/livekit/token            Üyelik + kanal tipi kontrolü → oda token'ı (identity = userId)
+src/app/api/servers/:id/voice-mute   Sunucuda susturma (DB'ye yazar + LiveKit'te anında uygular)
+src/components/voice/
+  voice-room.tsx                     LiveKitRoom: kanala girince bağlan, çıkınca ayrıl
+  voice-stage.tsx                    Katılımcı ızgarası; ekran paylaşımı varsa sahneye alır
+  participant-card.tsx               Avatar/kamera, konuşan yeşil halka, mikrofon/susturma ikonları
+  participant-menu.tsx               Sağ tık: ses seviyesi %0–200, yerel susturma, sunucuda susturma
+  voice-controls.tsx                 Mikrofon, kamera, ekran paylaşımı, bağlantıyı kes
+```
+
+- **Ses kanalına tıklamak** odaya bağlar (mikrofon açık, kamera kapalı); başka sayfaya geçmek ya da kırmızı butona basmak ayırır. Aynı hesapla ikinci sekmeden girilirse ilki düşer.
+- **Kullanıcı başına ses seviyesi** yalnızca bu cihazda geçerlidir ve `localStorage`'da kişi başına saklanır. %100 üstü için oda `webAudioMix` ile açılır: ses bir Web Audio GainNode'dan geçer (`<audio>` elemanı 1.0'ın üstünü kabul etmez).
+- **Yerel susturma** yalnızca senin duyduğunu keser; **sunucuda susturma** LiveKit'in kendisinde o kişinin mikrofon yayın iznini kaldırır, yani istemciye güvenmez. Bayrak `Member.serverMuted`'da durur, token her katılımda ondan üretildiği için çıkıp girmek susturmayı kaldırmaz. Diğer katılımcılar durumu LiveKit participant attribute'larından görür.
+- Rol değişikliği, kişi kanala tekrar girene kadar LiveKit attribute'larına yansımaz; yetkiyi yine de sunucu tarafı kontrol eder.
+
 ## Yetkiler
 
 | İşlem                                       | GUEST | MODERATOR | ADMIN | Sahip |
@@ -53,6 +76,7 @@ Mesaj gönderme/düzenleme/silme **REST** ile yapılır; sunucu kaydı yazar, ar
 | Sunucu adı/simgesi, davet bağlantısını yenile |       |           |  ✅   |  ✅   |
 | Sunucuyu sil                                 |       |           |       |  ✅   |
 | Sunucudan ayrıl                              |  ✅   |    ✅     |  ✅   |       |
+| Sunucuda sustur (yalnızca alt roldekileri)    |       |    ✅     |  ✅   |  ✅   |
 
 Sunucuyu oluşturan kişi ADMIN ve sahip olur; davetle katılanlar GUEST. Rol değiştirme Aşama 4'teki üye menüsüyle gelecek.
 
@@ -74,6 +98,8 @@ Sunucuyu oluşturan kişi ADMIN ve sahip olur; davetle katılanlar GUEST. Rol de
 | PATCH  | `/api/messages/:id` · DELETE           | Düzenle · sil (yumuşak silme)                          |
 | POST   | `/api/invite/:code`                    | Davetle katıl                                          |
 | POST   | `/api/uploads`                         | Ek yükle (görsel veya PDF, ≤ 8 MB) → `{ url }`         |
+| GET    | `/api/livekit/token?channelId=`        | Ses kanalı token'ı → `{ token, url, serverMuted }`     |
+| POST   | `/api/servers/:id/voice-mute`          | `{ userId, muted }` sunucuda susturma                  |
 
 ## Dosya depolama (`src/lib/storage.ts`)
 
