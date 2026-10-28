@@ -9,7 +9,7 @@ import { ConfirmModal } from '@/components/modals/confirm-modal';
 import { UserAvatar } from '@/components/user/user-avatar';
 import { messageUrl, type ChatKind } from '@/lib/chat-target';
 import { apiFetch, errorMessage } from '@/lib/client-api';
-import { MENTION_PATTERN, type MessageDTO } from '@/lib/messages';
+import { findMentions, MENTION_PATTERN, type MentionRange, type MessageDTO } from '@/lib/messages';
 import { cn } from '@/lib/utils';
 import { MESSAGE_MAX_LENGTH } from '@/lib/validators';
 
@@ -32,22 +32,29 @@ export function jumpToMessage(messageId: string) {
   return true;
 }
 
+/** Single-word `@name` tokens, for chats without a member list (DMs). */
+function tokenMentions(content: string): MentionRange[] {
+  const ranges: MentionRange[] = [];
+  for (const m of content.matchAll(MENTION_PATTERN)) {
+    const name = m[1].replace(/\.+$/, ''); // "@ali." at a sentence's end
+    if (name.length >= 2) ranges.push({ start: m.index!, end: m.index! + 1 + name.length, name });
+  }
+  return ranges;
+}
+
 /** Message text with @mentions highlighted, as Discord does. */
-function MessageText({ content }: { content: string }) {
+function MessageText({ content, mentionNames }: { content: string; mentionNames: string[] }) {
+  const ranges = mentionNames.length ? findMentions(content, mentionNames) : tokenMentions(content);
   const parts: React.ReactNode[] = [];
   let last = 0;
-  for (const m of content.matchAll(MENTION_PATTERN)) {
-    const start = m.index!;
-    // "@ali." at a sentence's end: the dot isn't part of the name.
-    const token = m[0].replace(/\.+$/, '');
-    if (token.length < 3) continue;
-    parts.push(<Fragment key={last}>{content.slice(last, start)}</Fragment>);
+  for (const r of ranges) {
+    parts.push(<Fragment key={last}>{content.slice(last, r.start)}</Fragment>);
     parts.push(
-      <span key={start} className="rounded bg-primary/30 px-0.5 font-medium text-[#c9cdfb]">
-        {token}
+      <span key={r.start} className="rounded bg-primary/30 px-0.5 font-medium text-[#c9cdfb]">
+        {content.slice(r.start, r.end)}
       </span>,
     );
-    last = start + token.length;
+    last = r.end;
   }
   parts.push(<Fragment key={last}>{content.slice(last)}</Fragment>);
   return <>{parts}</>;
@@ -61,9 +68,19 @@ interface ChatItemProps {
   continuation: boolean;
   onChanged: (message: MessageDTO) => void;
   onReply: (message: MessageDTO) => void;
+  /** Usernames that @-highlight (the server's members); empty in DMs. */
+  mentionNames: string[];
 }
 
-export function ChatItem({ kind, message, currentUser, continuation, onChanged, onReply }: ChatItemProps) {
+export function ChatItem({
+  kind,
+  message,
+  currentUser,
+  continuation,
+  onChanged,
+  onReply,
+  mentionNames,
+}: ChatItemProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
   const [saving, setSaving] = useState(false);
@@ -229,7 +246,7 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged, 
         ) : (
           message.content && (
             <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed">
-              <MessageText content={message.content} />
+              <MessageText content={message.content} mentionNames={mentionNames} />
               {edited && <span className="ml-1 text-[10px] text-muted-foreground">(düzenlendi)</span>}
             </p>
           )

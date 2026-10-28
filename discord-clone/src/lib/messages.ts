@@ -129,12 +129,37 @@ export interface MessagePage {
 /** Matches `@name` where name is a possible username (see USERNAME_CHARS). */
 export const MENTION_PATTERN = new RegExp(`(?<![${USERNAME_CHARS}])@([${USERNAME_CHARS}]{2,32})`, 'g');
 
-/** `@name` tokens in a message, without a sentence's trailing dot ("@ali."). */
-export function mentionedUsernames(content: string): string[] {
-  const names = new Set<string>();
-  for (const m of content.matchAll(MENTION_PATTERN)) {
-    const name = m[1].replace(/\.+$/, '');
-    if (name.length >= 2) names.add(name);
+const NAME_CHAR = new RegExp(`[${USERNAME_CHARS}]`);
+const fold = (s: string) => s.toLocaleLowerCase('tr-TR');
+
+export interface MentionRange {
+  start: number;
+  /** Exclusive; covers "@" plus the name. */
+  end: number;
+  name: string;
+}
+
+/**
+ * Where `content` @mentions one of `names` (case-insensitive). Names can hold
+ * spaces ("@Ali Veli"), so this matches known names rather than tokenizing;
+ * the longest name wins ("@Ali Veli" over "@Ali"). A sentence's trailing dot
+ * doesn't block a match ("@ali.").
+ */
+export function findMentions(content: string, names: string[]): MentionRange[] {
+  const byLength = [...new Set(names)].sort((a, b) => b.length - a.length);
+  const ranges: MentionRange[] = [];
+  for (let i = content.indexOf('@'); i !== -1; i = content.indexOf('@', i + 1)) {
+    if (i > 0 && NAME_CHAR.test(content[i - 1])) continue; // an e-mail address
+    for (const name of byLength) {
+      const end = i + 1 + name.length;
+      if (fold(content.slice(i + 1, end)) !== fold(name)) continue;
+      let next = end;
+      while (content[next] === '.') next++;
+      if (next < content.length && NAME_CHAR.test(content[next])) continue; // "@ali" inside "@alican"
+      ranges.push({ start: i, end, name });
+      i = end - 1;
+      break;
+    }
   }
-  return [...names];
+  return ranges;
 }

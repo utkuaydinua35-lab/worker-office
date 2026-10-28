@@ -37,7 +37,7 @@ export default async function ChannelPage(props: {
   }
 
   const members = await db.member.findMany({
-    where: { serverId: params.serverId, userId: { not: userId } },
+    where: { serverId: params.serverId },
     select: { user: { select: { id: true, username: true, avatarUrl: true } } },
     orderBy: { user: { username: 'asc' } },
   });

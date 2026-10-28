@@ -4,13 +4,15 @@ import { invalid, jsonError, notFound, readJson, unauthorized } from '@/lib/api'
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getChannelAccess } from '@/lib/membership';
-import { mentionedUsernames, messageSelect, MESSAGES_PAGE_SIZE, toMessageDTO, type MessagePage } from '@/lib/messages';
+import { findMentions, messageSelect, MESSAGES_PAGE_SIZE, toMessageDTO, type MessagePage } from '@/lib/messages';
 import { getMusicService, looksLikeCommand } from '@/lib/music/bridge';
 import { emitChannelActivity, emitMessage } from '@/lib/socket/emit';
 import { isOwnUploadUrl } from '@/lib/storage';
 import { createMessageSchema } from '@/lib/validators';
 
 type Ctx = { params: Promise<{ channelId: string }> };
+
+const fold = (s: string) => s.toLocaleLowerCase('tr-TR');
 
 /** Newest first, MESSAGES_PAGE_SIZE per page. `?cursor=<messageId>` continues with older ones. */
 export async function GET(req: Request, ctx: Ctx) {
@@ -57,17 +59,19 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   // @name → the server's members by that name (case-insensitive), never yourself.
-  const names = mentionedUsernames(content);
-  const mentioned = names.length
+  const others = content.includes('@')
     ? await db.member.findMany({
-        where: {
-          serverId: access.channel.serverId,
-          userId: { not: userId },
-          user: { OR: names.map((n) => ({ username: { equals: n, mode: 'insensitive' as const } })) },
-        },
-        select: { userId: true },
+        where: { serverId: access.channel.serverId, userId: { not: userId } },
+        select: { userId: true, user: { select: { username: true } } },
       })
     : [];
+  const hit = new Set(
+    findMentions(
+      content,
+      others.map((m) => m.user.username),
+    ).map((r) => fold(r.name)),
+  );
+  const mentioned = others.filter((m) => hit.has(fold(m.user.username)));
   // A reply pings the author it answers, as Discord does by default.
   const replyAuthor = replyToId
     ? (await db.message.findUnique({ where: { id: replyToId }, select: { userId: true } }))?.userId

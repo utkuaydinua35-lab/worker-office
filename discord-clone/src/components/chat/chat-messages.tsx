@@ -21,9 +21,10 @@ interface ChatMessagesProps {
   currentUser: { id: string; role: MemberRole };
   chat: ReturnType<typeof useChatMessages>;
   onReply: (message: MessageDTO) => void;
+  mentionNames: string[];
 }
 
-export function ChatMessages({ kind, intro, currentUser, chat, onReply }: ChatMessagesProps) {
+export function ChatMessages({ kind, intro, currentUser, chat, onReply, mentionNames }: ChatMessagesProps) {
   const { messages, status, hasMore, loadingOlder, loadOlder, upsert, retry } = chat;
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -105,6 +106,7 @@ export function ChatMessages({ kind, intro, currentUser, chat, onReply }: ChatMe
               continuation={continuation}
               onChanged={upsert}
               onReply={onReply}
+              mentionNames={mentionNames}
             />
           );
         })}

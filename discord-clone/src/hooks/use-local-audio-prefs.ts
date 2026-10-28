@@ -1,6 +1,6 @@
 'use client';
 
-import type { Participant, RemoteParticipant } from 'livekit-client';
+import { RoomEvent, type Participant, type RemoteParticipant, type Room } from 'livekit-client';
 import { useCallback, useEffect, useState } from 'react';
 
 export const VOLUME_MIN = 0;
@@ -89,6 +89,34 @@ function applyVolume(participant: RemoteParticipant, prefs: LocalAudioPrefs) {
     console.warn('[voice] Web Audio unavailable; volume capped at 100%');
     participant.setVolume(Math.min(gain, 1));
   }
+}
+
+/**
+ * Applies every saved per-user volume to the room as people (and the music
+ * bot) join or publish, and as the prefs change. Lives with the connection,
+ * so it holds whatever page is open, not only while the voice stage is.
+ */
+export function watchAudioPrefs(room: Room) {
+  const apply = (p: RemoteParticipant) => applyVolume(p, readPrefs(p.identity));
+  const applyAll = () => room.remoteParticipants.forEach(apply);
+  const onSubscribed = (_track: unknown, _pub: unknown, p: RemoteParticipant) => apply(p);
+  const onChange = (e: Event) => {
+    const { userId } = (e as CustomEvent<{ userId: string }>).detail;
+    const p = room.remoteParticipants.get(userId);
+    if (p) apply(p);
+  };
+  room
+    .on(RoomEvent.Connected, applyAll)
+    .on(RoomEvent.ParticipantConnected, apply)
+    .on(RoomEvent.TrackSubscribed, onSubscribed);
+  window.addEventListener(CHANGE_EVENT, onChange);
+  return () => {
+    room
+      .off(RoomEvent.Connected, applyAll)
+      .off(RoomEvent.ParticipantConnected, apply)
+      .off(RoomEvent.TrackSubscribed, onSubscribed);
+    window.removeEventListener(CHANGE_EVENT, onChange);
+  };
 }
 
 /**

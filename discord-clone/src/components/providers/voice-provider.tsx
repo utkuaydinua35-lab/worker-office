@@ -13,6 +13,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSocket } from '@/components/providers/socket-provider';
+import { watchAudioPrefs } from '@/hooks/use-local-audio-prefs';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 import { SERVER_DEAFENED_ATTRIBUTE, SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
 
@@ -138,6 +139,9 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       // storage unavailable; the preference just won't persist
     }
   }, [selfMuted, deafened]);
+
+  // Saved per-user volumes apply from the moment someone joins, on any page.
+  useEffect(() => watchAudioPrefs(room), [room]);
 
   useEffect(() => {
     const onDisconnected = (reason?: DisconnectReason) => {

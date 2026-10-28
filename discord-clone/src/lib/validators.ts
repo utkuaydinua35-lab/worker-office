@@ -11,7 +11,11 @@ export const usernameSchema = z
   .trim()
   .min(2, 'Kullanıcı adı en az 2 karakter olmalı')
   .max(32, 'Kullanıcı adı en fazla 32 karakter olabilir')
-  .regex(new RegExp(`^[${USERNAME_CHARS}]+$`), 'Yalnızca harf, rakam, "_" ve "." kullanılabilir');
+  // Words separated by single spaces ("Ali Veli"), no leading/trailing/double spaces.
+  .regex(
+    new RegExp(`^[${USERNAME_CHARS}]+(?: [${USERNAME_CHARS}]+)*$`),
+    'Yalnızca harf, rakam, boşluk, "_" ve "." kullanılabilir (art arda iki boşluk olmaz)',
+  );
 
 export const registerSchema = z.object({
   username: usernameSchema,

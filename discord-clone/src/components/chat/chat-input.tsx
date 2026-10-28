@@ -41,12 +41,13 @@ interface ChatInputProps {
   mentionables: Mentionable[];
 }
 
-const MENTION_QUERY = new RegExp(`(?:^|[^${USERNAME_CHARS}])@([${USERNAME_CHARS}]{0,32})$`);
+// Names can hold single spaces, so the query can too ("@Ali Ve").
+const MENTION_QUERY = new RegExp(`(?:^|[^${USERNAME_CHARS}])@((?:[${USERNAME_CHARS}]+(?: [${USERNAME_CHARS}]+)* ?)?)$`);
 
 /** The `@partial` being typed right before the caret, if any. */
 function mentionQuery(text: string, caret: number) {
   const m = MENTION_QUERY.exec(text.slice(0, caret));
-  return m ? { query: m[1], start: caret - m[1].length - 1 } : null;
+  return m && m[1].length <= 32 ? { query: m[1], start: caret - m[1].length - 1 } : null;
 }
 
 function typingLabel(users: TypingUser[]) {
