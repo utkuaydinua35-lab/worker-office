@@ -24,7 +24,7 @@ npm run dev
 
 `.env` içinde `DATABASE_URL` ve `NEXTAUTH_SECRET` doldurulmalı (`openssl rand -base64 32`). Ardından http://localhost:3000 adresini açın.
 
-**Yayına almak için:** [DEPLOY.md](DEPLOY.md) (Docker Compose + Caddy ile HTTPS, kendi alan adınızda).
+**Yayına almak için:** [DEPLOY.md](DEPLOY.md) (Docker Compose + Cloudflare Tunnel + LiveKit Cloud, mağaza sunucusunun yanında).
 
 Ses kanalları için bir LiveKit sunucusu (**1.13 veya üstü**) gerekir (yoksa metin tarafı yine çalışır, ses kanalında uyarı görünür):
 

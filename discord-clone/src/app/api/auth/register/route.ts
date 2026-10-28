@@ -3,12 +3,21 @@ import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 
 import { db } from '@/lib/db';
+import { clientIp, registerByIp } from '@/lib/rate-limit';
 import { registrationCodeMatches } from '@/lib/registration';
 import { registerSchema } from '@/lib/validators';
 
 const BCRYPT_ROUNDS = 12;
 
 export async function POST(req: Request) {
+  const wait = registerByIp.hit(clientIp(req.headers));
+  if (wait) {
+    return NextResponse.json(
+      { error: 'Çok fazla kayıt denemesi. Biraz bekleyip tekrar dene.' },
+      { status: 429, headers: { 'Retry-After': String(wait) } },
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = registerSchema.safeParse(body);
   if (!parsed.success) {

@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RATE_LIMITED_ERROR } from '@/lib/auth-errors';
 
 // Only follow same-origin relative paths, never an attacker-supplied absolute URL.
 function safeCallback(raw: string | null): string {
@@ -30,7 +31,11 @@ export function LoginForm() {
     const res = await signIn('credentials', { email, password, redirect: false });
     setLoading(false);
     if (!res || res.error) {
-      setError('E-posta veya şifre hatalı');
+      setError(
+        res?.error === RATE_LIMITED_ERROR
+          ? 'Çok fazla deneme yapıldı. Biraz bekleyip tekrar dene.'
+          : 'E-posta veya şifre hatalı',
+      );
       return;
     }
     router.push(safeCallback(params.get('callbackUrl')));

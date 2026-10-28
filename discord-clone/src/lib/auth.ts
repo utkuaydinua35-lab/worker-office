@@ -3,7 +3,9 @@ import type { NextAuthOptions } from 'next-auth';
 import { getServerSession } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
+import { RATE_LIMITED_ERROR } from '@/lib/auth-errors';
 import { db } from '@/lib/db';
+import { clientIp, loginByIp, loginFailuresByEmail } from '@/lib/rate-limit';
 import { loginSchema } from '@/lib/validators';
 
 export const authOptions: NextAuthOptions = {
@@ -18,16 +20,23 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'E-posta', type: 'email' },
         password: { label: 'Şifre', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
+        // Thrown errors reach the login form as `error`; null means "wrong credentials".
+        if (loginByIp.hit(clientIp(req?.headers))) throw new Error(RATE_LIMITED_ERROR);
+
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
+        const email = parsed.data.email.toLowerCase();
+        if (loginFailuresByEmail.blocked(email)) throw new Error(RATE_LIMITED_ERROR);
 
         const user = await db.user.findUnique({ where: { email: parsed.data.email } });
         // System accounts (the music bot) never sign in.
-        if (!user || user.isBot) return null;
-
-        const valid = await bcrypt.compare(parsed.data.password, user.password);
-        if (!valid) return null;
+        const valid = !!user && !user.isBot && (await bcrypt.compare(parsed.data.password, user.password));
+        if (!user || !valid) {
+          loginFailuresByEmail.hit(email);
+          return null;
+        }
+        loginFailuresByEmail.reset(email);
 
         return {
           id: user.id,

@@ -1,59 +1,55 @@
-# Hasbihal — single-server deployment. See DEPLOY.md.
+# Hasbihal on the store server, next to the store. See DEPLOY.md.
 #
-# Everything uses host networking (Linux) so the internal services can bind
-# to 127.0.0.1 only: Postgres, the app (3000) and LiveKit's API (7880) are
-# unreachable from outside. Public: Caddy (80/443) and LiveKit's media ports
-# (7881/tcp, 50000-50100/udp).
+# Touches nothing of the store's: opens no public port (HTTPS is the
+# Cloudflare tunnel's; 80/443 stay nginx's), needs no firewall change, and
+# leaves 5432 alone. Voice and video run on LiveKit Cloud. Containers sit on
+# their own bridge network, so they can't reach services the store binds to
+# the host's loopback.
 name: hasbihal
 
 services:
   db:
     image: postgres:16.14-bookworm
     restart: unless-stopped
-    network_mode: host
-    command: ["postgres", "-c", "listen_addresses=127.0.0.1"]
     environment:
       POSTGRES_USER: hasbihal
       POSTGRES_DB: hasbihal
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    # Loopback only, and not the store's 5432. The app uses db:5432 inside the
+    # network; this is for backups and psql from the server.
+    ports:
+      - "127.0.0.1:5433:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "hasbihal"]
+      test: ["CMD", "pg_isready", "-U", "hasbihal"]
       interval: 5s
       retries: 20
-
-  livekit:
-    image: livekit/livekit-server:v1.13.10
-    restart: unless-stopped
-    network_mode: host
-    command: ["--config", "/etc/livekit.yaml"]
-    environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?}: ${LIVEKIT_API_SECRET:?}"
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
 
   app:
     build:
       context: ..
       dockerfile: Dockerfile
     restart: unless-stopped
-    network_mode: host
     depends_on:
       db:
         condition: service_healthy
-      livekit:
-        condition: service_started
+    # The tunnel's route is http://localhost:3000.
+    ports:
+      - "127.0.0.1:3000:3000"
+    # Keep the store's share of the machine.
+    mem_limit: 700m
+    cpus: 2
     environment:
       PORT: "3000"
-      BIND_HOST: 127.0.0.1
-      DATABASE_URL: postgresql://hasbihal:${POSTGRES_PASSWORD}@127.0.0.1:5432/hasbihal?schema=public
+      # Collect garbage before the 700m limit kills the container.
+      NODE_OPTIONS: --max-old-space-size=448
+      DATABASE_URL: postgresql://hasbihal:${POSTGRES_PASSWORD}@db:5432/hasbihal?schema=public
       NEXTAUTH_URL: https://${DOMAIN:?}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?}
-      NEXT_PUBLIC_LIVEKIT_URL: wss://${DOMAIN}
-      LIVEKIT_INTERNAL_URL: ws://127.0.0.1:7880
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      NEXT_PUBLIC_LIVEKIT_URL: ${LIVEKIT_URL:?set LIVEKIT_URL (wss://...livekit.cloud) in deploy/.env}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?}
       REGISTRATION_CODE: ${REGISTRATION_CODE:-}
     volumes:
       - uploads:/app/uploads
@@ -61,19 +57,6 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
 
-  caddy:
-    image: caddy:2.11.6-alpine
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      DOMAIN: ${DOMAIN}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-
 volumes:
   db-data:
   uploads:
-  caddy-data:
-  caddy-config:

@@ -50,11 +50,21 @@ function readSessionToken(cookieHeader: string | undefined): string | null {
 // The session cookie is SameSite=Lax, so a cross-site page can't ride it on a
 // fetch — but browsers DO attach it to cross-site WebSocket handshakes. Refuse
 // any browser handshake whose Origin isn't this host.
+const siteOrigin = (() => {
+  try {
+    return new URL(process.env.NEXTAUTH_URL ?? '').origin;
+  } catch {
+    return null;
+  }
+})();
+
 function isSameOrigin(req: IncomingMessage) {
   const origin = req.headers.origin;
   if (!origin) return true; // non-browser client; it still needs a valid session cookie
   try {
-    return new URL(origin).host === req.headers.host;
+    const { host, origin: o } = new URL(origin);
+    // NEXTAUTH_URL covers a proxy that rewrites Host (a tunnel to localhost:3000).
+    return host === req.headers.host || o === siteOrigin;
   } catch {
     return false;
   }
