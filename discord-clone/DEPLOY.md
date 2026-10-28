@@ -2,6 +2,11 @@
 
 Bu rehber uygulamayı kendi sunucunuzda (VPS), kendi alan adınızla ve HTTPS ile yayınlar. Birkaç arkadaşın kullanacağı bir sunucu için tasarlandı.
 
+İki yol var:
+
+- **Cloudflare Tunnel ile** (alan adı Cloudflare'de ve VPS'te zaten bir tünel varsa önerilir): hiçbir port açılmaz, ses LiveKit Cloud'dan geçer. Bkz. [Cloudflare Tunnel ile](#cloudflare-tunnel-ile).
+- **Doğrudan** (aşağıdaki 1–7. adımlar): Caddy HTTPS'i, LiveKit sesi sunucunuzda çalıştırır; 80, 443 ve medya portları açılır.
+
 ## Neyin dışarıya açık olduğu
 
 | Ne | Nereden erişilir |
@@ -149,3 +154,34 @@ docker run --rm -v hasbihal_uploads:/data -v /root:/backup alpine tar czf /backu
 - **Site açılmıyor / sertifika hatası:** DNS kaydı sunucunun IP'sini gösteriyor mu, 80 ve 443 açık mı? `docker compose logs caddy`.
 - **Ses kanalına girilemiyor ya da kimse duyulmuyor:** 7881/tcp ve 50000–50100/udp güvenlik duvarında (VPS sağlayıcısının panelindeki güvenlik duvarı dahil) açık mı? `docker compose logs livekit`.
 - **Müzik botu çalmıyor:** `docker compose logs app`. YouTube hatalarında yukarıdaki yt-dlp güncellemesini yapın.
+
+## Cloudflare Tunnel ile
+
+Alan adı Cloudflare'deyse ve VPS'te `cloudflared` çalışıyorsa bu yol daha basit ve daha kapalıdır:
+
+- Sunucuda **hiçbir port açılmaz**, güvenlik duvarına dokunulmaz. Uygulama yalnızca `127.0.0.1:3000`'de yayınlanır; tünel onu oradan alır.
+- PostgreSQL hiçbir porttan yayınlanmaz; yalnızca uygulama konteyneri ona ulaşır.
+- HTTPS'i Cloudflare sağlar, Caddy kullanılmaz.
+- Ses ve görüntü **LiveKit Cloud**'dan geçer, çünkü tünel WebRTC'nin UDP trafiğini taşıyamaz.
+
+Dosya: `deploy/docker-compose.tunnel.yml`. Her `docker compose` komutuna `-f docker-compose.tunnel.yml` eklenir.
+
+1. https://cloud.livekit.io adresinde bir proje açın; proje adresini (`wss://...livekit.cloud`), API key ve secret'ı alın.
+2. Kodu sunucuya gönderin (4. adım) ve `.env`'i hazırlayın (5. adım). `LIVEKIT_API_KEY` ve `LIVEKIT_API_SECRET` LiveKit Cloud'dakiler olsun, `LIVEKIT_URL` satırının başındaki `#`'i kaldırıp proje adresini yazın.
+3. Başlatın:
+   ```bash
+   cd /opt/hasbihal/deploy
+   docker compose -f docker-compose.tunnel.yml up -d --build
+   ```
+4. Cloudflare Zero Trust'ta tünelin published application ayarı: Service URL `http://127.0.0.1:3000`. `localhost` yazmayın; bazı sistemlerde IPv6'ya çözülüp 502 verir.
+
+`cloudflared` sunucuda bir sistem servisi olarak çalışmalı (`systemctl status cloudflared`). Docker konteyneri olarak çalışıyorsa `127.0.0.1` konteynerin kendisidir; o durumda iki konteyneri aynı Docker ağına bağlayın ve adresi ona göre verin.
+
+Açıp kapatma:
+
+```bash
+docker compose -f docker-compose.tunnel.yml stop
+docker compose -f docker-compose.tunnel.yml start
+```
+
+`stop` ile kapatılan uygulama, sunucu yeniden başlasa da kapalı kalır. Veriler (mesajlar, hesaplar, yüklenen dosyalar) silinmez.
