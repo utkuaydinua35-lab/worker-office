@@ -100,7 +100,8 @@ src/lib/music/bridge.ts      Route Handler'lar ↔ bot (globalThis; yalnızca ti
 
 | Komut | Diğer adlar | Ne yapar |
 | ----- | ----------- | -------- |
-| `!play <YouTube linki veya arama>` | `!p`, `!çal` | Çalar ya da sıraya ekler (en fazla 50) |
+| `!play <YouTube linki veya arama>` | `!p`, `!çal` | Çalar ya da sıraya ekler (sıra en fazla 200) |
+| `!play <çalma listesi linki>` | | Listedeki tüm şarkıları sıraya ekler; `watch?v=…&list=…` ise o videodan başlar. Gizli/silinmiş videolar atlanır |
 | `!pause` / `!resume` | `!duraklat` / `!devam` | Duraklatır / devam ettirir |
 | `!skip` | `!s`, `!geç` | Sıradakine geçer |
 | `!stop` | `!dur`, `!leave` | Sırayı temizler, kanaldan ayrılır |

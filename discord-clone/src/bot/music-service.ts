@@ -2,7 +2,7 @@ import { AccessToken } from 'livekit-server-sdk';
 
 import { BOT_USERNAME } from '@/bot/bot-user';
 import { HELP_TEXT, parseCommand } from '@/bot/commands';
-import { checkTools, resolveMedia, toYtDlpTarget } from '@/bot/media';
+import { checkTools, resolveMedia, resolvePlaylist, toYtDlpTarget, type ResolvedMedia } from '@/bot/media';
 import { MusicPlayer } from '@/bot/player';
 import { db } from '@/lib/db';
 import { livekitConfig, roomService, voiceRoomName } from '@/lib/livekit';
@@ -15,7 +15,7 @@ import { BOT_ATTRIBUTE } from '@/lib/voice-attributes';
 import { pokeVoicePresence } from '@/services/voice-presence';
 
 export const BOT_IDENTITY = 'music-bot';
-const MAX_QUEUE = 50;
+const MAX_QUEUE = 200;
 const IDLE_LEAVE_MS = 2 * 60 * 1000; // queue empty
 const ALONE_LEAVE_MS = 30 * 1000; // nobody left listening
 const AUDIENCE_POLL_MS = 5 * 1000;
@@ -101,13 +101,22 @@ export class DiscordCloneMusicService implements MusicService {
     if (player && player.voiceChannel.id !== voiceChannel.id) {
       return reply(`🎧 Şu an ${player.voiceChannel.name} kanalında çalıyorum; oraya katıl.`);
     }
-    if (player && player.getState().queue.length >= MAX_QUEUE) {
-      return reply(`❌ Sıra dolu (en fazla ${MAX_QUEUE} şarkı).`);
-    }
+    const room = MAX_QUEUE - (player?.size ?? 0);
+    if (room <= 0) return reply(`❌ Sıra dolu (en fazla ${MAX_QUEUE} şarkı).`);
 
-    let media;
+    let items: ResolvedMedia[];
+    let playlist: { title: string; total: number; skipped: number } | null = null;
     try {
-      media = await resolveMedia(target.target);
+      if (target.playlist) {
+        const list = await resolvePlaylist(target.target);
+        // watch?v=X&list=Y: start at X like YouTube does; earlier entries are dropped.
+        const start = target.startId ? list.entries.findIndex((e) => e.id === target.startId) : -1;
+        const fromStart = start > 0 ? list.entries.slice(start) : list.entries;
+        items = fromStart.slice(0, room);
+        playlist = { title: list.title, total: fromStart.length, skipped: list.skipped };
+      } else {
+        items = [await resolveMedia(target.target)];
+      }
     } catch (err) {
       return reply(`❌ Bulunamadı: ${(err as Error).message}`);
     }
@@ -123,17 +132,35 @@ export class DiscordCloneMusicService implements MusicService {
     player.textChannelId = ctx.textChannelId;
     this.cancelLeave(ctx.serverId);
 
-    const track: MusicTrack = {
-      id: media.id,
-      title: media.title,
-      pageUrl: media.pageUrl,
-      durationSec: media.durationSec,
-      thumbnail: media.thumbnail,
-      requestedBy: { id: ctx.userId, username: ctx.username },
-    };
-    const position = player.enqueue({ track, media });
-    // Position 1 starts right away; the trackStart handler announces it.
-    if (position > 1) await reply(`➕ Sıraya eklendi (#${position - 1}): ${track.title} [${formatDuration(track.durationSec)}]`);
+    const requestedBy = { id: ctx.userId, username: ctx.username };
+    const queued = items.map((media) => ({
+      media,
+      track: {
+        id: media.id,
+        title: media.title,
+        pageUrl: media.pageUrl,
+        durationSec: media.durationSec,
+        thumbnail: media.thumbnail,
+        requestedBy,
+      } satisfies MusicTrack,
+    }));
+    const position = player.enqueue(...queued);
+
+    if (playlist) {
+      const notes = [
+        playlist.total > items.length && `sıra sınırı yüzünden ${playlist.total - items.length} şarkı eklenmedi`,
+        playlist.skipped > 0 && `${playlist.skipped} gizli/silinmiş video atlandı`,
+      ].filter(Boolean);
+      await reply(
+        `📃 ${playlist.title}: ${items.length} şarkı sıraya eklendi` +
+          (notes.length ? ` (${notes.join(', ')})` : '') +
+          '. Sıradakine geçmek için !skip.',
+      );
+    } else if (position > 1) {
+      // Position 1 starts right away; the trackStart handler announces it.
+      const t = queued[0].track;
+      await reply(`➕ Sıraya eklendi (#${position - 1}): ${t.title} [${formatDuration(t.durationSec)}]`);
+    }
   }
 
   /** pause / resume / skip / stop, shared by commands and panel buttons. */

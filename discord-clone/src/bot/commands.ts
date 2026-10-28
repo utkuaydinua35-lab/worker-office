@@ -44,6 +44,7 @@ export function parseCommand(content: string): BotCommand | null {
 export const HELP_TEXT = [
   '🎵 Müzik komutları',
   '!play <YouTube linki veya arama> — çal ya da sıraya ekle (!p, !çal)',
+  '!play <çalma listesi linki> — listedeki tüm şarkıları sıraya ekle',
   '!pause — duraklat (!duraklat)   !resume — devam et (!devam)',
   '!skip — sıradakine geç (!geç)   !stop — durdur ve kanaldan ayrıl (!dur)',
   '!queue — sırayı göster (!sıra)',

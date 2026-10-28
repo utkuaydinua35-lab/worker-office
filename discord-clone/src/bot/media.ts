@@ -79,17 +79,31 @@ function allowedHosts() {
   return [...YOUTUBE_HOSTS, ...extra];
 }
 
+export interface YtDlpTarget {
+  target: string;
+  /** A playlist link (`list=` in the URL): queue every entry. */
+  playlist: boolean;
+  /** For `watch?v=X&list=Y`: start the playlist at X, as YouTube does. */
+  startId: string | null;
+}
+
 /** The argument to hand yt-dlp for a user query, or an error message. */
-export function toYtDlpTarget(query: string): { target: string } | { error: string } {
-  if (!/^https?:\/\//i.test(query)) return { target: `ytsearch1:${query}` };
-  let host: string;
+export function toYtDlpTarget(query: string): YtDlpTarget | { error: string } {
+  if (!/^https?:\/\//i.test(query)) return { target: `ytsearch1:${query}`, playlist: false, startId: null };
+  let url: URL;
   try {
-    host = new URL(query).hostname.toLowerCase();
+    url = new URL(query);
   } catch {
     return { error: 'Geçersiz bağlantı.' };
   }
+  const host = url.hostname.toLowerCase();
   const ok = allowedHosts().some((h) => host === h || host.endsWith(`.${h}`));
-  return ok ? { target: query } : { error: 'Yalnızca YouTube bağlantıları ya da arama destekleniyor.' };
+  if (!ok) return { error: 'Yalnızca YouTube bağlantıları ya da arama destekleniyor.' };
+  return {
+    target: query,
+    playlist: !!url.searchParams.get('list'),
+    startId: url.searchParams.get('v'),
+  };
 }
 
 const ytDlpError = (stderr: string) =>
@@ -97,6 +111,51 @@ const ytDlpError = (stderr: string) =>
     .split('\n')
     .find((l) => l.startsWith('ERROR:'))
     ?.replace(/^ERROR:\s*/, '');
+
+export interface ResolvedPlaylist {
+  title: string;
+  entries: ResolvedMedia[];
+  /** Private, deleted or otherwise unplayable entries left out. */
+  skipped: number;
+}
+
+const PLAYLIST_TIMEOUT_MS = 60_000;
+const UNAVAILABLE_TITLE = /^\[(private|deleted|unavailable)[^\]]*\]$/i;
+
+/**
+ * Lists a playlist's entries without opening each video (`--flat-playlist`),
+ * so even long lists come back in a couple of seconds. Each entry is resolved
+ * properly when its turn comes.
+ */
+export async function resolvePlaylist(target: string): Promise<ResolvedPlaylist> {
+  const { code, stdout, stderr } = await run(
+    YTDLP,
+    ['--yes-playlist', '--flat-playlist', '--dump-single-json', '--no-warnings', '--', target],
+    PLAYLIST_TIMEOUT_MS,
+  );
+  if (code !== 0) throw new Error(ytDlpError(stderr) ?? 'yt-dlp başarısız oldu');
+
+  const info = JSON.parse(stdout) as Record<string, unknown>;
+  const raw = Array.isArray(info.entries) ? (info.entries as Record<string, unknown>[]) : [];
+  const entries: ResolvedMedia[] = [];
+  for (const e of raw) {
+    const id = typeof e.id === 'string' ? e.id : null;
+    const title = typeof e.title === 'string' ? e.title : null;
+    if (!id || !title || UNAVAILABLE_TITLE.test(title)) continue;
+    const thumbnails = Array.isArray(e.thumbnails) ? (e.thumbnails as { url?: unknown }[]) : [];
+    const thumbnail = thumbnails.at(-1)?.url;
+    entries.push({
+      id,
+      title,
+      pageUrl:
+        typeof e.url === 'string' && /^https?:\/\//.test(e.url) ? e.url : `https://www.youtube.com/watch?v=${id}`,
+      durationSec: typeof e.duration === 'number' ? e.duration : null,
+      thumbnail: typeof thumbnail === 'string' ? thumbnail : null,
+    });
+  }
+  if (entries.length === 0) throw new Error('Çalma listesinde çalınabilir şarkı yok');
+  return { title: String(info.title ?? 'Çalma listesi'), entries, skipped: raw.length - entries.length };
+}
 
 /** Looks the track up (title, length, thumbnail). Nothing is downloaded yet. */
 export async function resolveMedia(target: string): Promise<ResolvedMedia> {

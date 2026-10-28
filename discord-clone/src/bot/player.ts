@@ -87,13 +87,21 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
     return !this.current && this.queue.length === 0;
   }
 
-  /** Returns the track's position counting the one playing (1 = starts now). */
-  enqueue(item: QueuedTrack): number {
-    this.queue.push(item);
-    const position = this.queue.length + (this.current ? 1 : 0);
+  /**
+   * Appends tracks; returns the first one's position counting the one playing
+   * (1 = starts now). One `change` for the batch, not one per track.
+   */
+  enqueue(...items: QueuedTrack[]): number {
+    const position = this.queue.length + (this.current ? 1 : 0) + 1;
+    this.queue.push(...items);
     this.emit('change');
     if (!this.running) void this.run();
     return position;
+  }
+
+  /** Tracks waiting plus the one playing. */
+  get size() {
+    return this.queue.length + (this.current ? 1 : 0);
   }
 
   pause() {
