@@ -25,7 +25,13 @@ export async function POST(req: Request) {
     return jsonError(415, 'Yalnızca PNG, JPEG, WEBP veya GIF yüklenebilir');
   }
 
-  const url = await saveUpload(buf, mime, 'avatars');
+  let url: string;
+  try {
+    url = await saveUpload(buf, mime, 'avatars');
+  } catch (err) {
+    console.error('[avatar] save failed', err);
+    return jsonError(500, 'Dosya kaydedilemedi');
+  }
   const previous = await db.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
   const user = await db.user.update({
     where: { id: userId },

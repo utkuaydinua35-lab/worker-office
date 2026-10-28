@@ -19,6 +19,9 @@ const MAX_QUEUE = 200;
 const IDLE_LEAVE_MS = 2 * 60 * 1000; // queue empty
 const ALONE_LEAVE_MS = 30 * 1000; // nobody left listening
 const AUDIENCE_POLL_MS = 5 * 1000;
+// Polls in a row the server doesn't list the bot before it counts as gone.
+const BOT_MISSING_POLLS = 3;
+const CONNECTION_LOST_MESSAGE = '⚠️ Ses sunucusuyla bağlantım koptu. Tekrar çalmak için !play yaz.';
 
 type LeaveReason = 'idle' | 'alone';
 
@@ -37,6 +40,7 @@ export class DiscordCloneMusicService implements MusicService {
   private readonly players = new Map<string, MusicPlayer>();
   private readonly leaveTimers = new Map<string, { reason: LeaveReason; timer: ReturnType<typeof setTimeout> }>();
   private readonly audienceWatchers = new Map<string, ReturnType<typeof setInterval>>();
+  private readonly botMissingPolls = new Map<string, number>();
   // Serializes commands per server so two quick !play's can't create two players.
   private readonly locks = new Map<string, Promise<unknown>>();
 
@@ -225,19 +229,23 @@ export class DiscordCloneMusicService implements MusicService {
     this.players.set(serverId, player);
 
     player.on('change', () => emitMusicState(serverId, player.getState()));
-    player.on('trackStart', (t) =>
+    player.on('trackStart', (t) => {
+      console.info('[music] playing', t.title);
       void this.post(
         player.textChannelId,
         `🎵 Şimdi çalıyor: ${t.title} [${formatDuration(t.durationSec)}] — isteyen: ${t.requestedBy.username}\n${t.pageUrl}`,
-      ),
-    );
+      );
+    });
     player.on('trackError', (t, err) => {
       console.warn('[music] track failed', t.title, err.message);
       void this.post(player.textChannelId, `❌ Çalınamadı: ${t.title} (${err.message})`);
     });
     player.on('idle', () => this.scheduleLeave(serverId, 'idle'));
     player.on('audience', () => void this.checkAudience(serverId));
-    player.on('disconnected', () => void this.destroy(serverId));
+    player.on('disconnected', () => {
+      console.warn('[music] disconnected from LiveKit', serverId);
+      void this.destroy(serverId).then(() => this.post(player.textChannelId, CONNECTION_LOST_MESSAGE));
+    });
     this.audienceWatchers.set(serverId, setInterval(() => void this.checkAudience(serverId), AUDIENCE_POLL_MS));
 
     emitMusicState(serverId, player.getState());
@@ -270,12 +278,27 @@ export class DiscordCloneMusicService implements MusicService {
     const rooms = roomService();
     if (!player || !rooms) return;
     let listeners: number;
+    let botHere: boolean;
     try {
       const participants = await rooms.listParticipants(voiceRoomName(player.voiceChannel.id));
       listeners = participants.filter((p) => p.identity !== BOT_IDENTITY).length;
+      botHere = participants.length > listeners;
     } catch {
       return; // LiveKit unreachable for a moment; try again next tick
     }
+    if (this.players.get(serverId) !== player) return; // replaced or stopped meanwhile
+
+    // rtc-node can lose the connection without a Disconnected event (a network
+    // blip), leaving a bot that "plays" into nothing. The server knows better.
+    const missing = botHere ? 0 : (this.botMissingPolls.get(serverId) ?? 0) + 1;
+    this.botMissingPolls.set(serverId, missing);
+    if (missing >= BOT_MISSING_POLLS) {
+      console.warn('[music] LiveKit no longer lists the bot; dropping the player', serverId);
+      await this.destroy(serverId);
+      await this.post(player.textChannelId, CONNECTION_LOST_MESSAGE);
+      return;
+    }
+
     const pending = this.leaveTimers.get(serverId)?.reason;
     if (listeners === 0 && pending !== 'alone') this.scheduleLeave(serverId, 'alone');
     else if (listeners > 0 && pending === 'alone') {
@@ -289,6 +312,7 @@ export class DiscordCloneMusicService implements MusicService {
     this.cancelLeave(serverId);
     clearInterval(this.audienceWatchers.get(serverId));
     this.audienceWatchers.delete(serverId);
+    this.botMissingPolls.delete(serverId);
     const player = this.players.get(serverId);
     if (!player) return;
     this.players.delete(serverId);
