@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, Loader2, PlusCircle, X, XCircle } from 'lucide-react';
+import { FileText, Loader2, PlusCircle, SendHorizontal, X, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { EmojiPicker } from '@/components/chat/emoji-picker';
@@ -317,7 +317,9 @@ export function ChatInput({
               return;
             }
             // Enter sends; Shift+Enter is a newline; never send mid-IME composition.
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            // Phone keyboards' Enter is a newline, as in Discord's app: they get a send button.
+            const touch = window.matchMedia('(hover: none)').matches;
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !touch) {
               e.preventDefault();
               void send();
             }
@@ -325,9 +327,21 @@ export function ChatInput({
           className="max-h-[200px] flex-1 resize-none bg-transparent py-0.5 text-[15px] placeholder:text-muted-foreground focus:outline-none"
         />
 
-        <div className="mt-0.5">
+        <div className="mt-0.5 max-sm:hidden">
           <EmojiPicker onSelect={insertEmoji} />
         </div>
+        <button
+          type="button"
+          title="Gönder"
+          aria-label="Gönder"
+          disabled={sending || uploading || (!content.trim() && !attachment)}
+          // mousedown keeps the keyboard open on phones.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void send()}
+          className="mt-0.5 hidden text-primary disabled:text-muted-foreground [@media(hover:none)]:block"
+        >
+          <SendHorizontal className="h-6 w-6" />
+        </button>
       </div>
 
       <div className="flex h-6 items-center justify-between text-xs">

@@ -49,6 +49,7 @@ export default async function ChannelPage(props: {
         name={channel.name}
         type="TEXT"
         pins={{ target, canUnpin: currentUser.isOwner || canModerateMessages(member.role) }}
+        members
       />
       <div className="flex min-h-0 flex-1">
         <ChatRoom

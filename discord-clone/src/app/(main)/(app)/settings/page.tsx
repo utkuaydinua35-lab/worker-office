@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
+import { MobileNavButton } from '@/components/providers/mobile-nav';
 import { ProfileSettingsForm } from '@/components/user/profile-settings-form';
 import { VoiceNotificationSettings } from '@/components/user/voice-notification-settings';
 import { getCurrentUserId } from '@/lib/auth';
@@ -18,22 +19,25 @@ export default async function SettingsPage() {
 
   return (
     <div className="min-w-0 flex-1 overflow-y-auto">
-    <main className="mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Kullanıcı Ayarları</h1>
-          <p className="text-sm text-muted-foreground">{user.email}</p>
+      <main className="mx-auto max-w-2xl px-4 py-10">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <MobileNavButton />
+            <div>
+              <h1 className="text-2xl font-bold">Kullanıcı Ayarları</h1>
+              <p className="text-sm text-muted-foreground">{user.email}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/" className="text-sm text-muted-foreground hover:underline">
+              Geri dön
+            </Link>
+            <SignOutButton />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/" className="text-sm text-muted-foreground hover:underline">
-            Geri dön
-          </Link>
-          <SignOutButton />
-        </div>
-      </div>
-      <ProfileSettingsForm initialProfile={toPublicProfile(user)} />
-      <VoiceNotificationSettings />
-    </main>
+        <ProfileSettingsForm initialProfile={toPublicProfile(user)} />
+        <VoiceNotificationSettings />
+      </main>
     </div>
   );
 }

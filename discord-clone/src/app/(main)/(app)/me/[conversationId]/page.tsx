@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { ChatRoom } from '@/components/chat/chat-room';
 import { PinnedMessages } from '@/components/chat/pinned-messages';
+import { MobileNavButton } from '@/components/providers/mobile-nav';
 import { UserAvatar } from '@/components/user/user-avatar';
 import { getCurrentUserId } from '@/lib/auth';
 import { getConversationAccess } from '@/lib/conversation';
@@ -24,8 +25,9 @@ export default async function ConversationPage(props: { params: Promise<{ conver
   return (
     <>
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-black/30 px-4">
-        <AtSign className="h-5 w-5 text-muted-foreground" />
-        <h1 className="font-semibold">{partner.username}</h1>
+        <MobileNavButton />
+        <AtSign className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <h1 className="truncate font-semibold">{partner.username}</h1>
         <div className="ml-auto">
           <PinnedMessages target={{ kind: 'conversation', id: params.conversationId }} canUnpin />
         </div>

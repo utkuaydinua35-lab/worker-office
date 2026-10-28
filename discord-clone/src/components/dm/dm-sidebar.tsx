@@ -3,6 +3,8 @@ import { UserPanel } from '@/components/server/user-panel';
 import { db } from '@/lib/db';
 import { effectiveStatus } from '@/lib/presence';
 import { isOnline } from '@/lib/socket/emit';
+import { LEFT_DRAWER } from '@/lib/mobile-layout';
+import { cn } from '@/lib/utils';
 
 const partnerSelect = { select: { id: true, username: true, avatarUrl: true, status: true } } as const;
 
@@ -42,7 +44,13 @@ export async function DmSidebar({ userId }: { userId: string }) {
     .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col bg-[#2b2d31]">
+    <aside
+      className={cn(
+        'flex h-full w-60 shrink-0 flex-col bg-[#2b2d31]',
+        LEFT_DRAWER,
+        'max-md:left-[72px] max-md:max-w-[calc(100vw-72px)] max-md:-translate-x-[calc(100%+72px)]',
+      )}
+    >
       <div className="flex h-12 items-center border-b border-black/30 px-4 font-semibold">Direkt Mesajlar</div>
       <div className="flex-1 overflow-y-auto px-2 py-3">
         <DmList entries={entries} />

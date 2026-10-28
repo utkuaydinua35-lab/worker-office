@@ -8,6 +8,8 @@ import { UserPanel } from '@/components/server/user-panel';
 import { db } from '@/lib/db';
 import { canManageChannels } from '@/lib/membership';
 import { getServerVoiceState } from '@/lib/voice-presence/store';
+import { LEFT_DRAWER } from '@/lib/mobile-layout';
+import { cn } from '@/lib/utils';
 
 interface ServerSidebarProps {
   serverId: string;
@@ -27,7 +29,13 @@ export async function ServerSidebar({ serverId, userId, role }: ServerSidebarPro
   });
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col bg-[#2b2d31]">
+    <aside
+      className={cn(
+        'flex h-full w-60 shrink-0 flex-col bg-[#2b2d31]',
+        LEFT_DRAWER,
+        'max-md:left-[72px] max-md:max-w-[calc(100vw-72px)] max-md:-translate-x-[calc(100%+72px)]',
+      )}
+    >
       <ServerRealtime serverId={server.id} />
       <ServerHeader
         server={{ id: server.id, name: server.name, iconUrl: server.iconUrl, inviteCode: server.inviteCode }}

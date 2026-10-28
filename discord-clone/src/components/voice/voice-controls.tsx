@@ -2,17 +2,9 @@
 
 import { useTrackToggle } from '@livekit/components-react';
 import { Track } from 'livekit-client';
-import {
-  Headphones,
-  HeadphoneOff,
-  Mic,
-  MicOff,
-  MonitorUp,
-  MonitorX,
-  PhoneOff,
-  Video,
-  VideoOff,
-} from 'lucide-react';
+import { Headphones, HeadphoneOff, Mic, MicOff, MonitorUp, MonitorX, PhoneOff, Video, VideoOff } from 'lucide-react';
+
+import { useEffect, useState } from 'react';
 
 import { useVoice } from '@/components/providers/voice-provider';
 import { cn } from '@/lib/utils';
@@ -36,9 +28,12 @@ export function VoiceControls() {
   });
 
   const micOn = !voice.selfMuted && !voice.deafened && !voice.serverMuted;
+  // Phones' browsers (iOS Safari, Android Chrome) can't share the screen.
+  const [canShare, setCanShare] = useState(true);
+  useEffect(() => setCanShare(typeof navigator.mediaDevices?.getDisplayMedia === 'function'), []);
 
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-[#1e1f22] px-4 py-3">
+    <div className="flex items-center gap-2 rounded-xl bg-[#1e1f22] px-3 py-3 sm:gap-3 sm:px-4">
       <ControlButton
         label={voice.serverMuted ? 'Sunucuda susturuldun' : micOn ? 'Mikrofonu kapat' : 'Mikrofonu aç'}
         active={micOn}
@@ -64,14 +59,16 @@ export function VoiceControls() {
       >
         {camera.enabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
       </ControlButton>
-      <ControlButton
-        label={screen.enabled ? 'Paylaşımı durdur' : 'Ekranını paylaş'}
-        active={screen.enabled}
-        disabled={screen.pending}
-        onClick={() => void screen.toggle()}
-      >
-        {screen.enabled ? <MonitorX className="h-5 w-5" /> : <MonitorUp className="h-5 w-5" />}
-      </ControlButton>
+      {canShare && (
+        <ControlButton
+          label={screen.enabled ? 'Paylaşımı durdur' : 'Ekranını paylaş'}
+          active={screen.enabled}
+          disabled={screen.pending}
+          onClick={() => void screen.toggle()}
+        >
+          {screen.enabled ? <MonitorX className="h-5 w-5" /> : <MonitorUp className="h-5 w-5" />}
+        </ControlButton>
+      )}
       <button
         type="button"
         title="Bağlantıyı kes"

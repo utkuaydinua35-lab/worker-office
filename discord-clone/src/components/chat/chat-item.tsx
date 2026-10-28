@@ -79,6 +79,17 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged, 
   const canPin = !message.deleted && (kind === 'conversation' || isModerator);
   const mentionsMe = !message.deleted && message.mentions.includes(currentUser.id);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Touch screens have no hover: a tap on the message shows its toolbar, a tap elsewhere hides it.
+  const [tapped, setTapped] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!tapped) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setTapped(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [tapped]);
 
   async function act(path: 'reactions' | 'pin', body: object) {
     setActionError(null);
@@ -132,6 +143,12 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged, 
   return (
     <div
       data-message-id={message.id}
+      ref={rootRef}
+      onClick={(e) => {
+        if (!window.matchMedia('(hover: none)').matches) return;
+        if ((e.target as HTMLElement).closest('button, a, textarea, input')) return;
+        setTapped(true);
+      }}
       className={cn(
         'group relative flex flex-wrap gap-x-4 px-4 transition-colors hover:bg-black/5',
         continuation && !message.replyTo ? 'py-0.5' : 'mt-3 py-0.5',
@@ -272,7 +289,7 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged, 
                 <button
                   type="button"
                   title="Tepki ekle"
-                  className="flex items-center rounded-md bg-secondary px-1.5 py-0.5 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+                  className="flex items-center rounded-md bg-secondary px-1.5 py-0.5 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
                   <SmilePlus className="h-4 w-4" />
                 </button>
@@ -284,7 +301,12 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged, 
       </div>
 
       {!message.deleted && !editing && (
-        <div className="absolute -top-3 right-4 hidden items-center rounded-md border border-border bg-card shadow group-hover:flex has-[[data-state=open]]:flex">
+        <div
+          className={cn(
+            'absolute -top-3 right-4 hidden items-center rounded-md border border-border bg-card shadow group-hover:flex has-[[data-state=open]]:flex',
+            tapped && 'flex',
+          )}
+        >
           <EmojiPicker
             onSelect={react}
             side="left"

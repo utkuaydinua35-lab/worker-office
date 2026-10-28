@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
+import { MobileNavButton } from '@/components/providers/mobile-nav';
 import { db } from '@/lib/db';
 
 /** Opens the server's first text channel. Membership is checked by the layout. */
@@ -13,8 +14,13 @@ export default async function ServerPage(props: { params: Promise<{ serverId: st
   if (channel) redirect(`/servers/${params.serverId}/channels/${channel.id}`);
 
   return (
-    <div className="flex flex-1 items-center justify-center p-6 text-center text-muted-foreground">
-      Bu sunucuda henüz metin kanalı yok.
-    </div>
+    <>
+      <header className="flex h-12 shrink-0 items-center px-4 md:hidden">
+        <MobileNavButton />
+      </header>
+      <div className="flex flex-1 items-center justify-center p-6 text-center text-muted-foreground">
+        Bu sunucuda henüz metin kanalı yok.
+      </div>
+    </>
   );
 }

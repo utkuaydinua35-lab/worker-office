@@ -72,7 +72,7 @@ export function PinnedMessages({ target, canUnpin }: { target: ChatTarget; canUn
           <Pin className="h-5 w-5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-0" aria-label="Sabitlenmiş mesajlar">
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1rem))] p-0" aria-label="Sabitlenmiş mesajlar">
         <p className="border-b border-border px-4 py-3 font-semibold">Sabitlenmiş Mesajlar</p>
         <div className="max-h-[60vh] overflow-y-auto p-2">
           {error && <p className="p-2 text-sm text-destructive">{error}</p>}

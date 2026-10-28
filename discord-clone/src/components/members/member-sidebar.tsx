@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import type { MemberDTO } from '@/lib/member-dto';
 import { effectiveStatus } from '@/lib/presence';
 import { isOnline } from '@/lib/socket/emit';
+import { cn } from '@/lib/utils';
 
 interface MemberSidebarProps {
   serverId: string;
@@ -51,7 +52,13 @@ export async function MemberSidebar({ serverId, currentUser }: MemberSidebarProp
   }));
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col overflow-y-auto bg-[#2b2d31] px-2 py-4 lg:flex">
+    <aside
+      className={cn(
+        'flex w-60 shrink-0 flex-col overflow-y-auto bg-[#2b2d31] px-2 py-4',
+        // Narrower screens: a drawer from the right (header's members button).
+        'max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:translate-x-full max-lg:transition-transform max-lg:duration-200 max-lg:group-data-[panel=members]/app:translate-x-0',
+      )}
+    >
       <MemberList serverId={serverId} members={dtos} currentUser={currentUser} />
     </aside>
   );
