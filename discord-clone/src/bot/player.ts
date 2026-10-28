@@ -71,6 +71,8 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
     this.room
       .on(RoomEvent.ParticipantConnected, () => this.emit('audience'))
       .on(RoomEvent.ParticipantDisconnected, () => this.emit('audience'))
+      .on(RoomEvent.Reconnecting, () => console.warn('[music] LiveKit connection lost, reconnecting', this.serverId))
+      .on(RoomEvent.Reconnected, () => console.info('[music] LiveKit reconnected', this.serverId))
       .on(RoomEvent.Disconnected, () => {
         if (!this.closed) this.emit('disconnected');
       });

@@ -39,6 +39,8 @@ export interface ServerToClientEvents {
   'music:state': (payload: { serverId: string; state: MusicState | null }) => void;
   /** Who's in the server's voice channels (from LiveKit). */
   'voice:state': (payload: { serverId: string; channels: VoiceChannelsState }) => void;
+  /** A moderator moved you: rejoin voice in this channel. */
+  'voice:move': (payload: { serverId: string; channelId: string; channelName: string }) => void;
 }
 
 export interface ClientToServerEvents {

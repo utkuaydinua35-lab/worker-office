@@ -1,11 +1,12 @@
 'use client';
 
-import { Loader2, MicOff } from 'lucide-react';
+import { Loader2, MicOff, PhoneOff } from 'lucide-react';
 import { useState } from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { VOLUME_MAX, VOLUME_MIN, type LocalAudioPrefs } from '@/hooks/use-local-audio-prefs';
 import { apiFetch, errorMessage } from '@/lib/client-api';
+import { voiceControl } from '@/lib/voice-control';
 
 interface ParticipantMenuProps {
   open: boolean;
@@ -15,6 +16,8 @@ interface ParticipantMenuProps {
   onPrefsChange: (patch: Partial<LocalAudioPrefs>) => void;
   /** Present only when the current user may server-mute this participant. */
   serverMute: { serverId: string; userId: string; muted: boolean } | null;
+  /** Present when the current user may disconnect this participant (or stop the bot). */
+  disconnect: { serverId: string; userId: string; label: string } | null;
   children: React.ReactNode;
 }
 
@@ -26,6 +29,7 @@ export function ParticipantMenu({
   prefs,
   onPrefsChange,
   serverMute,
+  disconnect,
   children,
 }: ParticipantMenuProps) {
   const [busy, setBusy] = useState(false);
@@ -41,6 +45,20 @@ export function ParticipantMenu({
         body: JSON.stringify({ userId: serverMute.userId, muted: !serverMute.muted }),
       });
       // The icon updates from the participant attribute LiveKit pushes back.
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runDisconnect() {
+    if (!disconnect) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await voiceControl(disconnect.serverId, { action: 'disconnect', userId: disconnect.userId });
+      onOpenChange(false);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -82,21 +100,30 @@ export function ParticipantMenu({
           />
         </label>
 
+        {(serverMute || disconnect) && <div className="h-px bg-border" />}
         {serverMute && (
-          <>
-            <div className="h-px bg-border" />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void toggleServerMute()}
-              className="flex w-full items-center justify-between rounded px-1 py-1 text-destructive hover:bg-secondary disabled:opacity-50"
-            >
-              {serverMute.muted ? 'Sunucu susturmasını kaldır' : 'Sunucuda sustur'}
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MicOff className="h-4 w-4" />}
-            </button>
-            {error && <p className="text-xs text-destructive">{error}</p>}
-          </>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void toggleServerMute()}
+            className="flex w-full items-center justify-between rounded px-1 py-1 text-destructive hover:bg-secondary disabled:opacity-50"
+          >
+            {serverMute.muted ? 'Sunucu susturmasını kaldır' : 'Sunucuda sustur'}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MicOff className="h-4 w-4" />}
+          </button>
         )}
+        {disconnect && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void runDisconnect()}
+            className="flex w-full items-center justify-between rounded px-1 py-1 text-destructive hover:bg-secondary disabled:opacity-50"
+          >
+            {disconnect.label}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneOff className="h-4 w-4" />}
+          </button>
+        )}
+        {error && <p className="text-xs text-destructive">{error}</p>}
       </PopoverContent>
     </Popover>
   );

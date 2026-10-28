@@ -9,6 +9,7 @@ import {
   type Participant,
   type RoomOptions,
 } from 'livekit-client';
+import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSocket } from '@/components/providers/socket-provider';
@@ -163,9 +164,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       setMediaError(null);
       try {
-        const res = await apiFetch<TokenResponse>(
-          `/api/livekit/token?channelId=${encodeURIComponent(target.id)}`,
-        );
+        const res = await apiFetch<TokenResponse>(`/api/livekit/token?channelId=${encodeURIComponent(target.id)}`);
         if (mine !== attempt.current) return;
         await room.disconnect(); // no-op when idle; leaves the previous channel otherwise
         setServerMuted(res.serverMuted);
@@ -181,6 +180,27 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     },
     [room],
   );
+
+  // A moderator moved us (Discord's "Move To"): rejoin there, and follow with
+  // the view if we were looking at the old channel.
+  const router = useRouter();
+  const pathname = usePathname();
+  const moveRef = useRef({ channel, pathname, join, router });
+  moveRef.current = { channel, pathname, join, router };
+  useEffect(() => {
+    if (!socket) return;
+    const onMove = (p: { serverId: string; channelId: string; channelName: string }) => {
+      const { channel: current, pathname: path, join: rejoin, router: nav } = moveRef.current;
+      if (!current || current.serverId !== p.serverId || current.id === p.channelId) return;
+      const oldPath = `/servers/${p.serverId}/channels/${current.id}`;
+      void rejoin({ ...current, id: p.channelId, name: p.channelName });
+      if (path === oldPath) nav.push(`/servers/${p.serverId}/channels/${p.channelId}`);
+    };
+    socket.on('voice:move', onMove);
+    return () => {
+      socket.off('voice:move', onMove);
+    };
+  }, [socket]);
 
   const leave = useCallback(() => {
     attempt.current++;

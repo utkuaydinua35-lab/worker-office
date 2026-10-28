@@ -11,10 +11,10 @@ import type { MusicCaller, MusicService } from '@/lib/music/bridge';
 import { formatDuration, type MusicAction, type MusicState, type MusicTrack } from '@/lib/music/types';
 import { canManageChannels } from '@/lib/roles';
 import { emitMessage, emitMusicState } from '@/lib/socket/emit';
-import { BOT_ATTRIBUTE } from '@/lib/voice-attributes';
+import { BOT_ATTRIBUTE, BOT_IDENTITY } from '@/lib/voice-attributes';
 import { pokeVoicePresence } from '@/services/voice-presence';
 
-export const BOT_IDENTITY = 'music-bot';
+export { BOT_IDENTITY };
 const MAX_QUEUE = 200;
 const IDLE_LEAVE_MS = 2 * 60 * 1000; // queue empty
 const ALONE_LEAVE_MS = 30 * 1000; // nobody left listening

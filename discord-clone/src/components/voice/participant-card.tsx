@@ -120,6 +120,13 @@ export function ParticipantCard({ participant, serverId, currentUser, compact }:
               ? { serverId, userId: participant.identity, muted: serverMuted }
               : null
           }
+          disconnect={
+            isBot
+              ? { serverId, userId: participant.identity, label: 'Botu Kanaldan Çıkar' }
+              : canServerMute(currentUser, target)
+                ? { serverId, userId: participant.identity, label: 'Bağlantıyı Kes' }
+                : null
+          }
         >
           <button
             type="button"

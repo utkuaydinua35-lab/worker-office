@@ -2,7 +2,7 @@
 
 import { ServerChannel } from '@/components/server/server-channel';
 import { ServerSection } from '@/components/server/server-section';
-import { useVoicePresence, VoiceChannelMembers } from '@/components/server/voice-channel-members';
+import { useVoicePresence, VoiceChannelMembers, type VoiceViewer } from '@/components/server/voice-channel-members';
 import type { ChannelTypeValue } from '@/lib/validators';
 import type { VoiceChannelsState } from '@/lib/voice-presence/store';
 
@@ -17,6 +17,7 @@ interface ServerChannelListProps {
   channels: ChannelRef[];
   canManage: boolean;
   initialVoice: VoiceChannelsState;
+  viewer: VoiceViewer;
 }
 
 const SECTIONS = [
@@ -25,8 +26,9 @@ const SECTIONS = [
 ] as const;
 
 /** Text and voice sections; voice channels list who's in them, live. */
-export function ServerChannelList({ serverId, channels, canManage, initialVoice }: ServerChannelListProps) {
+export function ServerChannelList({ serverId, channels, canManage, initialVoice, viewer }: ServerChannelListProps) {
   const voice = useVoicePresence(serverId, initialVoice);
+  const voiceChannels = channels.filter((c) => c.type === 'VOICE');
 
   return (
     <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
@@ -40,7 +42,13 @@ export function ServerChannelList({ serverId, channels, canManage, initialVoice 
                 <div key={channel.id}>
                   <ServerChannel serverId={serverId} channel={channel} canManage={canManage} />
                   {channel.type === 'VOICE' && (
-                    <VoiceChannelMembers channelId={channel.id} members={voice[channel.id] ?? []} />
+                    <VoiceChannelMembers
+                      serverId={serverId}
+                      channelId={channel.id}
+                      members={voice[channel.id] ?? []}
+                      voiceChannels={voiceChannels}
+                      viewer={viewer}
+                    />
                   )}
                 </div>
               ))}

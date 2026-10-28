@@ -80,10 +80,10 @@ sudo chown $USER /opt/hasbihal
 
 ## 4. Kodu sunucuya gönderme
 
-**Mac'te**, `worker-office` klasöründe. Yalnızca `discord-clone` gönderilir; `.env`, `node_modules` ve yüklenen dosyalar gitmez. `KULLANICI` yerine sunucudaki kullanıcı adınızı yazın:
+**Mac'te**, `worker-office` klasöründe. Yalnızca `discord-clone` gönderilir; `.env`, `node_modules` ve yüklenen dosyalar gitmez. `/uploads` başındaki `/` önemlidir: yalnızca en üstteki `uploads` klasörünü dışarıda bırakır; onsuz, dosyaları sunan `src/app/uploads` rotası da gönderilmez ve resimler 404 verir. `KULLANICI` yerine sunucudaki kullanıcı adınızı yazın:
 
 ```bash
-rsync -av --delete --exclude node_modules --exclude .next --exclude uploads --exclude .env --exclude deploy/.env --exclude prisma/migrations ./discord-clone/ KULLANICI@91.132.49.107:/opt/hasbihal/
+rsync -av --delete --exclude node_modules --exclude .next --exclude /uploads --exclude .env --exclude deploy/.env --exclude prisma/migrations ./discord-clone/ KULLANICI@91.132.49.107:/opt/hasbihal/
 ```
 
 ## 5. Ayarlar

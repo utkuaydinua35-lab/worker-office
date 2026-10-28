@@ -109,6 +109,11 @@ export function emitVoiceState(serverId: string, channels: VoiceChannelsState) {
   getIO()?.to(serverRoom(serverId)).emit('voice:state', { serverId, channels });
 }
 
+/** Tells every tab of `userId` to switch voice channels. */
+export function emitVoiceMove(userId: string, payload: { serverId: string; channelId: string; channelName: string }) {
+  getIO()?.to(userRoom(userId)).emit('voice:move', payload);
+}
+
 // ─── Servers ────────────────────────────────────────────────────────────
 
 export function emitServerUpdated(serverId: string) {

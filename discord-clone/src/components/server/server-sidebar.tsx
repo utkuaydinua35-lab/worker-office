@@ -40,6 +40,7 @@ export async function ServerSidebar({ serverId, userId, role }: ServerSidebarPro
         channels={server.channels.map((c) => ({ id: c.id, name: c.name, type: c.type }))}
         canManage={canManageChannels(role)}
         initialVoice={getServerVoiceState(server.id)}
+        viewer={{ id: userId, role, isOwner: server.ownerId === userId }}
       />
 
       <NowPlayingPanel serverId={server.id} />
