@@ -1,5 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
+import { USERNAME_CHARS } from '@/lib/validators';
+
 export const MESSAGES_PAGE_SIZE = 50;
 /** Distinct emoji per message, like Discord's cap. */
 export const MAX_REACTIONS_PER_MESSAGE = 20;
@@ -124,8 +126,8 @@ export interface MessagePage {
   nextCursor: string | null;
 }
 
-/** Matches `@name` where name is a possible username (ASCII letters, digits, `_`, `.`). */
-export const MENTION_PATTERN = /(?<![A-Za-z0-9_.])@([A-Za-z0-9_.]{2,32})/g;
+/** Matches `@name` where name is a possible username (see USERNAME_CHARS). */
+export const MENTION_PATTERN = new RegExp(`(?<![${USERNAME_CHARS}])@([${USERNAME_CHARS}]{2,32})`, 'g');
 
 /** `@name` tokens in a message, without a sentence's trailing dot ("@ali."). */
 export function mentionedUsernames(content: string): string[] {

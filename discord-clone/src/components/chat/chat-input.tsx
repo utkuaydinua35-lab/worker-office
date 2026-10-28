@@ -10,7 +10,7 @@ import type { TypingUser } from '@/hooks/use-chat-messages';
 import { messagesUrl, type ChatTarget } from '@/lib/chat-target';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 import type { MessageDTO } from '@/lib/messages';
-import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MIME_TYPES, MESSAGE_MAX_LENGTH } from '@/lib/validators';
+import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MIME_TYPES, MESSAGE_MAX_LENGTH, USERNAME_CHARS } from '@/lib/validators';
 
 // Re-announce "typing" at most this often, and announce "stopped" after this much quiet.
 const TYPING_THROTTLE_MS = 3000;
@@ -41,9 +41,11 @@ interface ChatInputProps {
   mentionables: Mentionable[];
 }
 
+const MENTION_QUERY = new RegExp(`(?:^|[^${USERNAME_CHARS}])@([${USERNAME_CHARS}]{0,32})$`);
+
 /** The `@partial` being typed right before the caret, if any. */
 function mentionQuery(text: string, caret: number) {
-  const m = /(?:^|[^A-Za-z0-9_.])@([A-Za-z0-9_.]{0,32})$/.exec(text.slice(0, caret));
+  const m = MENTION_QUERY.exec(text.slice(0, caret));
   return m ? { query: m[1], start: caret - m[1].length - 1 } : null;
 }
 
@@ -80,7 +82,7 @@ export function ChatInput({
   const mention = mentionables.length ? mentionQuery(content, caret) : null;
   const suggestions = mention
     ? mentionables
-        .filter((m) => m.username.toLowerCase().startsWith(mention.query.toLowerCase()))
+        .filter((m) => m.username.toLocaleLowerCase('tr-TR').startsWith(mention.query.toLocaleLowerCase('tr-TR')))
         .slice(0, MAX_SUGGESTIONS)
     : [];
   useEffect(() => setHighlight(0), [mention?.query]);

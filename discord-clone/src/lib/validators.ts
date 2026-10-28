@@ -3,12 +3,15 @@ import { z } from 'zod';
 export const USER_STATUSES = ['ONLINE', 'IDLE', 'DND', 'OFFLINE'] as const;
 export type UserStatusValue = (typeof USER_STATUSES)[number];
 
+/** Characters a username may use (a RegExp character-class body): Turkish letters included. */
+export const USERNAME_CHARS = 'A-Za-z0-9_.çğıöşüÇĞİÖŞÜ';
+
 export const usernameSchema = z
   .string()
   .trim()
   .min(2, 'Kullanıcı adı en az 2 karakter olmalı')
   .max(32, 'Kullanıcı adı en fazla 32 karakter olabilir')
-  .regex(/^[a-zA-Z0-9_.]+$/, 'Yalnızca harf, rakam, "_" ve "." kullanılabilir');
+  .regex(new RegExp(`^[${USERNAME_CHARS}]+$`), 'Yalnızca harf, rakam, "_" ve "." kullanılabilir');
 
 export const registerSchema = z.object({
   username: usernameSchema,

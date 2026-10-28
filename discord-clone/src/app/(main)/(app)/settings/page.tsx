@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
+import { BackLink } from '@/components/navigation/back-link';
 import { MobileNavButton } from '@/components/providers/mobile-nav';
 import { ProfileSettingsForm } from '@/components/user/profile-settings-form';
 import { VoiceNotificationSettings } from '@/components/user/voice-notification-settings';
@@ -29,9 +29,7 @@ export default async function SettingsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/" className="text-sm text-muted-foreground hover:underline">
-              Geri dön
-            </Link>
+            <BackLink className="text-sm text-muted-foreground hover:underline" />
             <SignOutButton />
           </div>
         </div>

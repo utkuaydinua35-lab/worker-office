@@ -3,7 +3,11 @@ import { redirect } from 'next/navigation';
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
 
-/** Lands on the first server the user joined; with none, on the DM home (which offers create/join). */
+/**
+ * Lands on the first server the user joined; with none, on the DM home (which
+ * offers create/join). It lives under the (app) layout so going "home" keeps
+ * the socket and the voice connection alive.
+ */
 export default async function HomePage() {
   const userId = await getCurrentUserId();
   if (!userId) redirect('/login');

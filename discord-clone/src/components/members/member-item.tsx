@@ -115,7 +115,7 @@ export function MemberItem({ serverId, member, currentUser }: MemberItemProps) {
                     aria-label="Kullanıcı ses seviyesi"
                     min={VOLUME_MIN}
                     max={VOLUME_MAX}
-                    step={5}
+                    step={1}
                     value={audio.prefs.volume}
                     disabled={audio.prefs.muted}
                     onChange={(e) => audio.update({ volume: Number(e.target.value) })}

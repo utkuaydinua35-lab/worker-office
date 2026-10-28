@@ -102,7 +102,7 @@ export function ParticipantMenu({
             type="range"
             min={VOLUME_MIN}
             max={VOLUME_MAX}
-            step={5}
+            step={1}
             value={prefs.volume}
             disabled={prefs.muted}
             onChange={(e) => onPrefsChange({ volume: Number(e.target.value) })}
