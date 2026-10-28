@@ -2,6 +2,7 @@
 // Type-only imports keep this module free of runtime dependencies.
 import type { ChatKind } from '@/lib/chat-target';
 import type { MessageDTO } from '@/lib/messages';
+import type { MusicState } from '@/lib/music/types';
 import type { UserStatusValue } from '@/lib/validators';
 
 export const SOCKET_PATH = '/api/socket';
@@ -33,6 +34,8 @@ export interface ServerToClientEvents {
   presence: (payload: PresencePayload) => void;
   /** A DM arrived in a conversation (sent to both participants' user rooms). */
   'conversation:activity': (payload: { conversationId: string }) => void;
+  /** The music bot's player for a server changed; `state` null = bot left. */
+  'music:state': (payload: { serverId: string; state: MusicState | null }) => void;
 }
 
 export interface ClientToServerEvents {

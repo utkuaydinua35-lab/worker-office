@@ -2,7 +2,7 @@
 
 Pixel Agents'tan bağımsız bir proje; kök `package.json` workspace'lerine dahil değildir.
 
-**Yığın:** Next.js 14 (App Router) · TypeScript · Prisma 5 · PostgreSQL · NextAuth v4 (Credentials + JWT) · Socket.io 4 · LiveKit (SFU) · Tailwind CSS · Shadcn UI (Radix) · emoji-mart
+**Yığın:** Next.js 14 (App Router) · TypeScript · Prisma 5 · PostgreSQL · NextAuth v4 (Credentials + JWT) · Socket.io 4 · LiveKit (SFU, `@livekit/rtc-node` bot) · yt-dlp + ffmpeg · Tailwind CSS · Shadcn UI (Radix) · emoji-mart
 
 | Aşama | Kapsam                                                                | Durum |
 | ----- | --------------------------------------------------------------------- | ----- |
@@ -10,7 +10,7 @@ Pixel Agents'tan bağımsız bir proje; kök `package.json` workspace'lerine dah
 | 2     | Sunucu/kanal yönetimi, davet, gerçek zamanlı mesajlaşma, dosya, emoji | ✅    |
 | 3     | Ses/görüntü odaları, ekran paylaşımı, kullanıcı ses ayarları (LiveKit) | ✅    |
 | 4     | Discord yerleşimi, üye listesi, profil kartı, sağ tık menüsü, DM      | ✅    |
-| 5     | Müzik botu                                                            | —     |
+| 5     | Müzik botu (YouTube → LiveKit, metin komutları, canlı çalma paneli)    | ✅    |
 
 ## Kurulum
 
@@ -76,6 +76,37 @@ src/components/voice/
 - **Sağ tık menüsü:** Profil, Mesaj Gönder, kullanıcı ses seviyesi (%0–200) ve yerel susturma (ses odasındaki kart menüsüyle senkron), yetkiye göre Sunucuda Sustur, Rol ve Sunucudan At.
 - **DM:** yalnızca ortak bir sunucuda olduğun kişilere (arkadaş listesi yok). Kanal sohbetiyle aynı bileşenler: canlı mesaj, yazıyor, düzenle/sil, ek, emoji.
 
+## Müzik botu (Aşama 5)
+
+Gereken programlar: `brew install yt-dlp ffmpeg` (YouTube sık değiştiği için yt-dlp'yi güncel tutun: `brew upgrade yt-dlp`).
+
+```
+src/bot/                     Yalnızca server.ts yükler; Next paketine girmez (native LiveKit modülü)
+  index.ts                   startMusicBot(): bot kullanıcısını hazırlar, hizmeti bridge'e kaydeder
+  music-service.ts           Sunucu başına bir oynatıcı; komutlar, yetki, bot mesajları, durum yayını, otomatik ayrılma
+  player.ts                  LiveKit'e katılımcı olarak bağlanır; ffmpeg PCM'ini 10 ms'lik karelerle yayınlar
+  media.ts                   yt-dlp ile arama/çözümleme, ffmpeg ile 48 kHz stereo PCM
+  commands.ts                !komut ayrıştırıcı
+src/lib/music/bridge.ts      Route Handler'lar ↔ bot (globalThis; yalnızca tipler)
+```
+
+**Akış:** metin kanalına `!play ...` yazılır → mesaj normal şekilde kaydedilir → mesaj API'si komutu bota iletir → bot, komutu yazanın o an bulunduğu ses kanalını LiveKit'ten öğrenir, oraya `Müzik Botu` olarak katılır ve çalar. Cevaplar bot kullanıcısından normal mesaj olarak gelir (BOT rozetiyle). Çalan şarkı ve sıra `music:state` olayıyla sunucudaki herkese yayınlanır; kanal listesinin altındaki panel ilerleme çubuğu, duraklat/geç/durdur butonları ve sırayı gösterir.
+
+| Komut | Diğer adlar | Ne yapar |
+| ----- | ----------- | -------- |
+| `!play <YouTube linki veya arama>` | `!p`, `!çal` | Çalar ya da sıraya ekler (en fazla 50) |
+| `!pause` / `!resume` | `!duraklat` / `!devam` | Duraklatır / devam ettirir |
+| `!skip` | `!s`, `!geç` | Sıradakine geçer |
+| `!stop` | `!dur`, `!leave` | Sırayı temizler, kanaldan ayrılır |
+| `!queue` | `!q`, `!sıra` | Sırayı listeler |
+| `!help` | `!yardım` | Komutları gösterir |
+
+- `!play` için bir ses kanalında olmak gerekir; bot başka bir kanalda çalıyorsa oraya katılmanız istenir (sunucu başına tek bot, Discord'daki gibi).
+- Duraklat/geç/durdur için botla aynı kanalda olmak gerekir; moderatör ve yöneticiler her yerden yönetebilir.
+- Bot sıra bitince 2 dakika, kanalda kimse kalmayınca 30 saniye sonra ayrılır. Kanaldakiler LiveKit sunucu API'sinden kontrol edilir (rtc-node'un katılımcı olayları her zaman gelmiyor).
+- Botun sesi diğer katılımcılar gibi sağ tıkla kişisel olarak kısılıp açılabilir.
+- **Güvenlik:** yt-dlp verilen adresi sunucudan indirir; bu yüzden yalnızca YouTube bağlantıları ve arama kabul edilir (aksi halde iç ağdaki adreslere istek attırılabilirdi). Başka siteler `MUSIC_EXTRA_URL_HOSTS` ile açılabilir. Bot hesabı (`isBot`) giriş yapamaz.
+
 ## Yetkiler
 
 | İşlem                                       | GUEST | MODERATOR | ADMIN | Sahip |
@@ -115,6 +146,7 @@ Sunucuyu oluşturan kişi ADMIN ve sahip olur; davetle katılanlar GUEST. Roller
 | POST   | `/api/conversations`                   | `{ userId }` → DM konuşmasını aç `{ id }`              |
 | GET    | `/api/conversations/:id/messages` · POST | DM mesajları (kanal mesajlarıyla aynı biçim)         |
 | PATCH  | `/api/direct-messages/:id` · DELETE    | DM düzenle · sil (yalnızca yazan)                      |
+| GET    | `/api/servers/:id/music` · POST        | Botun durumu · `{ action: pause/resume/skip/stop }`    |
 
 ## Dosya depolama (`src/lib/storage.ts`)
 

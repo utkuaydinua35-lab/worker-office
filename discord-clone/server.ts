@@ -16,6 +16,7 @@ const hostname = 'localhost';
 async function main() {
   // Imported after loadEnvConfig: Prisma reads DATABASE_URL on first use.
   const { attachSocketServer } = await import('./src/lib/socket/server');
+  const { startMusicBot } = await import('./src/bot');
 
   const app = next({ dev, hostname, port });
   const handle = app.getRequestHandler();
@@ -23,6 +24,8 @@ async function main() {
 
   const httpServer = createServer((req, res) => void handle(req, res));
   attachSocketServer(httpServer);
+  // After the socket server: the bot announces its state through it.
+  await startMusicBot();
 
   httpServer.listen(port, () => {
     console.log(`> Hazır: http://${hostname}:${port} (${dev ? 'development' : 'production'})`);

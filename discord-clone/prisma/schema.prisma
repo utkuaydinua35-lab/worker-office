@@ -39,6 +39,8 @@ model User {
   bio          String?    @db.VarChar(190)
   status       UserStatus @default(OFFLINE)
   customStatus String?    @db.VarChar(128)
+  // System accounts (the music bot). They can't sign in and own no memberships.
+  isBot        Boolean    @default(false)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

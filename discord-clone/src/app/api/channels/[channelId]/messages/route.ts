@@ -5,6 +5,7 @@ import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getChannelAccess } from '@/lib/membership';
 import { messageSelect, MESSAGES_PAGE_SIZE, toMessageDTO, type MessagePage } from '@/lib/messages';
+import { getMusicService, looksLikeCommand } from '@/lib/music/bridge';
 import { emitMessage } from '@/lib/socket/emit';
 import { isOwnUploadUrl } from '@/lib/storage';
 import { createMessageSchema } from '@/lib/validators';
@@ -55,5 +56,20 @@ export async function POST(req: Request, { params }: Ctx) {
   });
   const message = toMessageDTO(row);
   emitMessage('channel', 'message:new', message);
+
+  // Bot commands ("!play ...") stay ordinary messages; the bot replies on its own time.
+  if (looksLikeCommand(content)) {
+    getMusicService()
+      ?.handleCommand({
+        serverId: access.channel.serverId,
+        textChannelId: access.channel.id,
+        userId,
+        username: row.user.username,
+        role: access.member.role,
+        isOwner: access.channel.server.ownerId === userId,
+        content,
+      })
+      .catch((err) => console.error('[music] command failed', err));
+  }
   return NextResponse.json(message, { status: 201 });
 }

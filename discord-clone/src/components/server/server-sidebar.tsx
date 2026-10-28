@@ -1,5 +1,6 @@
 import type { MemberRole } from '@prisma/client';
 
+import { NowPlayingPanel } from '@/components/music/now-playing-panel';
 import { ServerChannel } from '@/components/server/server-channel';
 import { ServerHeader } from '@/components/server/server-header';
 import { ServerRealtime } from '@/components/server/server-realtime';
@@ -64,6 +65,7 @@ export async function ServerSidebar({ serverId, userId, role }: ServerSidebarPro
         ))}
       </div>
 
+      <NowPlayingPanel serverId={server.id} />
       <UserPanel user={user} />
     </aside>
   );

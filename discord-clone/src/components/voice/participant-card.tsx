@@ -10,7 +10,7 @@ import {
 } from '@livekit/components-react';
 import type { MemberRole } from '@prisma/client';
 import { Track, type Participant } from 'livekit-client';
-import { MicOff, MoreVertical, VolumeX } from 'lucide-react';
+import { MicOff, MoreVertical, Music, VolumeX } from 'lucide-react';
 import { useState } from 'react';
 
 import { ParticipantMenu } from '@/components/voice/participant-menu';
@@ -18,7 +18,12 @@ import { UserAvatar } from '@/components/user/user-avatar';
 import { useLocalAudioPrefs } from '@/hooks/use-local-audio-prefs';
 import { canServerMute } from '@/lib/roles';
 import { cn } from '@/lib/utils';
-import { OWNER_ATTRIBUTE, ROLE_ATTRIBUTE, SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
+import {
+  BOT_ATTRIBUTE,
+  OWNER_ATTRIBUTE,
+  ROLE_ATTRIBUTE,
+  SERVER_MUTED_ATTRIBUTE,
+} from '@/lib/voice-attributes';
 
 const ROLES: readonly MemberRole[] = ['ADMIN', 'MODERATOR', 'GUEST'];
 
@@ -51,6 +56,8 @@ export function ParticipantCard({ participant, serverId, currentUser, compact }:
   const serverMuted = attributes?.[SERVER_MUTED_ATTRIBUTE] === '1';
   const targetRole = ROLES.find((r) => r === attributes?.[ROLE_ATTRIBUTE]) ?? 'GUEST';
   const target = { role: targetRole, isOwner: attributes?.[OWNER_ATTRIBUTE] === '1' };
+  // The music bot isn't a member: no server mute, but local volume works on it like on anyone.
+  const isBot = attributes?.[BOT_ATTRIBUTE] === '1';
   const showCamera = camera && !camera.publication.isMuted;
 
   return (
@@ -74,6 +81,15 @@ export function ParticipantCard({ participant, serverId, currentUser, compact }:
           trackRef={camera}
           className={cn('h-full w-full object-cover', participant.isLocal && '-scale-x-100')}
         />
+      ) : isBot ? (
+        <span
+          className={cn(
+            'flex items-center justify-center rounded-full bg-status-online text-white',
+            compact ? 'h-12 w-12' : 'h-20 w-20',
+          )}
+        >
+          <Music className={compact ? 'h-6 w-6' : 'h-10 w-10'} />
+        </span>
       ) : (
         <UserAvatar
           username={displayName}
@@ -100,7 +116,7 @@ export function ParticipantCard({ participant, serverId, currentUser, compact }:
           prefs={audio.prefs}
           onPrefsChange={audio.update}
           serverMute={
-            canServerMute(currentUser, target)
+            !isBot && canServerMute(currentUser, target)
               ? { serverId, userId: participant.identity, muted: serverMuted }
               : null
           }

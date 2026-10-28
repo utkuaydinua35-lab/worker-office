@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 
 export const MESSAGES_PAGE_SIZE = 50;
 
-const author = { select: { id: true, username: true, avatarUrl: true } } as const;
+const author = { select: { id: true, username: true, avatarUrl: true, isBot: true } } as const;
 
 export const messageSelect = {
   id: true,
@@ -41,7 +41,7 @@ export interface MessageDTO {
   roomId: string;
   createdAt: string;
   updatedAt: string;
-  user: { id: string; username: string; avatarUrl: string | null };
+  user: { id: string; username: string; avatarUrl: string | null; isBot: boolean };
 }
 
 export function toMessageDTO({ channelId, ...row }: MessageRow): MessageDTO {

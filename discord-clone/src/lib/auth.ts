@@ -23,7 +23,8 @@ export const authOptions: NextAuthOptions = {
         if (!parsed.success) return null;
 
         const user = await db.user.findUnique({ where: { email: parsed.data.email } });
-        if (!user) return null;
+        // System accounts (the music bot) never sign in.
+        if (!user || user.isBot) return null;
 
         const valid = await bcrypt.compare(parsed.data.password, user.password);
         if (!valid) return null;

@@ -1,7 +1,7 @@
 'use client';
 
 import type { MemberRole } from '@prisma/client';
-import { Edit, FileText, Trash } from 'lucide-react';
+import { Edit, FileText, Music, Trash } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { ConfirmModal } from '@/components/modals/confirm-modal';
@@ -91,7 +91,13 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged }
             {shortTime.format(created)}
           </span>
         ) : (
-          <UserAvatar username={message.user.username} avatarUrl={message.user.avatarUrl} />
+          message.user.isBot ? (
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-status-online text-white">
+              <Music className="h-5 w-5" />
+            </span>
+          ) : (
+            <UserAvatar username={message.user.username} avatarUrl={message.user.avatarUrl} />
+          )
         )}
       </div>
 
@@ -99,6 +105,11 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged }
         {!continuation && (
           <div className="flex items-baseline gap-2">
             <span className="font-semibold">{message.user.username}</span>
+            {message.user.isBot && (
+              <span className="rounded bg-primary px-1 py-px text-[10px] font-semibold leading-none text-primary-foreground">
+                BOT
+              </span>
+            )}
             <time className="text-xs text-muted-foreground" dateTime={message.createdAt}>
               {fullTime.format(created)}
             </time>

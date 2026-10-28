@@ -3,6 +3,7 @@ import type { Server } from 'socket.io';
 import type { ChatKind } from '@/lib/chat-target';
 import { db } from '@/lib/db';
 import type { MessageDTO } from '@/lib/messages';
+import type { MusicState } from '@/lib/music/types';
 import { effectiveStatus } from '@/lib/presence';
 import {
   channelRoom,
@@ -95,6 +96,12 @@ export function emitMessage(kind: ChatKind, event: 'message:new' | 'message:upda
 /** Lets both participants' DM lists pick up a conversation that just got a message. */
 export function emitConversationActivity(conversationId: string, userIds: string[]) {
   getIO()?.to(userIds.map(userRoom)).emit('conversation:activity', { conversationId });
+}
+
+// ─── Music ──────────────────────────────────────────────────────────────
+
+export function emitMusicState(serverId: string, state: MusicState | null) {
+  getIO()?.to(serverRoom(serverId)).emit('music:state', { serverId, state });
 }
 
 // ─── Servers ────────────────────────────────────────────────────────────
