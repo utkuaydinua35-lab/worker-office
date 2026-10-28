@@ -1,9 +1,10 @@
 'use client';
 
-import { FileText, Loader2, PlusCircle, X } from 'lucide-react';
+import { FileText, Loader2, PlusCircle, X, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { EmojiPicker } from '@/components/chat/emoji-picker';
+import { UserAvatar } from '@/components/user/user-avatar';
 import { useSocket } from '@/components/providers/socket-provider';
 import type { TypingUser } from '@/hooks/use-chat-messages';
 import { messagesUrl, type ChatTarget } from '@/lib/chat-target';
@@ -22,23 +23,86 @@ interface Attachment {
   name: string;
 }
 
+const MAX_SUGGESTIONS = 8;
+
+export interface Mentionable {
+  id: string;
+  username: string;
+  avatarUrl: string | null;
+}
+
 interface ChatInputProps {
   target: ChatTarget;
   placeholder: string;
   onSent: (message: MessageDTO) => void;
   typingUsers: TypingUser[];
+  replyTo: MessageDTO | null;
+  onCancelReply: () => void;
+  mentionables: Mentionable[];
+}
+
+/** The `@partial` being typed right before the caret, if any. */
+function mentionQuery(text: string, caret: number) {
+  const m = /(?:^|[^A-Za-z0-9_.])@([A-Za-z0-9_.]{0,32})$/.exec(text.slice(0, caret));
+  return m ? { query: m[1], start: caret - m[1].length - 1 } : null;
 }
 
 function typingLabel(users: TypingUser[]) {
   if (users.length === 0) return null;
-  if (users.length === 1) return <><b>{users[0].username}</b> yazıyor...</>;
-  if (users.length === 2) return <><b>{users[0].username}</b> ve <b>{users[1].username}</b> yazıyor...</>;
+  if (users.length === 1)
+    return (
+      <>
+        <b>{users[0].username}</b> yazıyor...
+      </>
+    );
+  if (users.length === 2)
+    return (
+      <>
+        <b>{users[0].username}</b> ve <b>{users[1].username}</b> yazıyor...
+      </>
+    );
   return <>Birkaç kişi yazıyor...</>;
 }
 
-export function ChatInput({ target, placeholder, onSent, typingUsers }: ChatInputProps) {
+export function ChatInput({
+  target,
+  placeholder,
+  onSent,
+  typingUsers,
+  replyTo,
+  onCancelReply,
+  mentionables,
+}: ChatInputProps) {
   const { socket } = useSocket();
   const [content, setContent] = useState('');
+  const [caret, setCaret] = useState(0);
+  const [highlight, setHighlight] = useState(0);
+  const mention = mentionables.length ? mentionQuery(content, caret) : null;
+  const suggestions = mention
+    ? mentionables
+        .filter((m) => m.username.toLowerCase().startsWith(mention.query.toLowerCase()))
+        .slice(0, MAX_SUGGESTIONS)
+    : [];
+  useEffect(() => setHighlight(0), [mention?.query]);
+
+  // Replying focuses the box, as in Discord.
+  useEffect(() => {
+    if (replyTo) textareaRef.current?.focus();
+  }, [replyTo]);
+
+  function completeMention(username: string) {
+    if (!mention) return;
+    const before = content.slice(0, mention.start);
+    const after = content.slice(caret);
+    const inserted = `@${username} `;
+    setContent(before + inserted + after);
+    const pos = before.length + inserted.length;
+    setCaret(pos);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(pos, pos);
+    });
+  }
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -105,11 +169,12 @@ export function ChatInput({ target, placeholder, onSent, typingUsers }: ChatInpu
     try {
       const message = await apiFetch<MessageDTO>(messagesUrl(target), {
         method: 'POST',
-        body: JSON.stringify({ content: text, fileUrl: attachment?.url ?? null }),
+        body: JSON.stringify({ content: text, fileUrl: attachment?.url ?? null, replyToId: replyTo?.id ?? null }),
       });
       onSent(message);
       setContent('');
       setAttachment(null);
+      onCancelReply();
       stopTyping();
     } catch (err) {
       setError(errorMessage(err));
@@ -130,10 +195,49 @@ export function ChatInput({ target, placeholder, onSent, typingUsers }: ChatInpu
     });
   }
 
+  const topRounded = !!(attachment || replyTo);
+
   return (
-    <div className="px-4 pb-1">
+    <div className="relative px-4 pb-1">
+      {suggestions.length > 0 && (
+        <ul
+          role="listbox"
+          aria-label="Üye önerileri"
+          className="absolute bottom-full left-4 right-4 mb-1 overflow-hidden rounded-md border border-border bg-[#2b2d31] py-1 shadow-lg"
+        >
+          <li className="px-3 py-1 text-xs font-semibold uppercase text-muted-foreground">Üyeler</li>
+          {suggestions.map((m, i) => (
+            <li key={m.id} role="option" aria-selected={i === highlight}>
+              <button
+                type="button"
+                // mousedown, not click: keep the textarea focused.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  completeMention(m.username);
+                }}
+                onMouseEnter={() => setHighlight(i)}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${i === highlight ? 'bg-secondary' : ''}`}
+              >
+                <UserAvatar username={m.username} avatarUrl={m.avatarUrl} className="h-6 w-6 text-[10px]" />
+                {m.username}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {replyTo && (
+        <div className="flex items-center gap-2 rounded-t-lg bg-[#2b2d31] px-4 py-2 text-sm text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate">
+            <b className="text-foreground">@{replyTo.user.username}</b> kullanıcısına yanıt veriliyor
+          </span>
+          <button type="button" title="Yanıtı iptal et" onClick={onCancelReply} className="hover:text-foreground">
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {attachment && (
-        <div className="mb-0 flex items-center gap-3 rounded-t-lg bg-[#383a40] p-3">
+        <div className={`mb-0 flex items-center gap-3 bg-[#383a40] p-3 ${replyTo ? '' : 'rounded-t-lg'}`}>
           {attachment.kind === 'image' ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={attachment.url} alt="" className="h-20 w-20 rounded object-cover" />
@@ -154,7 +258,7 @@ export function ChatInput({ target, placeholder, onSent, typingUsers }: ChatInpu
 
       <div
         className={
-          attachment
+          topRounded
             ? 'flex items-start gap-3 rounded-b-lg border-t border-border bg-[#383a40] px-4 py-2.5'
             : 'flex items-start gap-3 rounded-lg bg-[#383a40] px-4 py-2.5'
         }
@@ -189,10 +293,29 @@ export function ChatInput({ target, placeholder, onSent, typingUsers }: ChatInpu
           aria-label="Mesaj"
           onChange={(e) => {
             setContent(e.target.value);
+            setCaret(e.target.selectionStart);
             if (e.target.value) announceTyping();
             else stopTyping();
           }}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
           onKeyDown={(e) => {
+            if (suggestions.length > 0) {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const step = e.key === 'ArrowDown' ? 1 : -1;
+                setHighlight((h) => (h + step + suggestions.length) % suggestions.length);
+                return;
+              }
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                completeMention(suggestions[highlight].username);
+                return;
+              }
+            }
+            if (e.key === 'Escape' && replyTo) {
+              onCancelReply();
+              return;
+            }
             // Enter sends; Shift+Enter is a newline; never send mid-IME composition.
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();

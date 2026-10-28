@@ -22,6 +22,8 @@ const SOURCE_QUEUE_MS = 200;
 export interface QueuedTrack {
   track: MusicTrack;
   media: ResolvedMedia;
+  /** Start this far in (a track carried over by a move). */
+  startMs?: number;
 }
 
 interface PlayerEvents {
@@ -101,6 +103,12 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
     return position;
   }
 
+  /** The playing track (with where it got to) and the queue, for carrying over to a new player. */
+  snapshot(): QueuedTrack[] {
+    const current = this.current ? [{ ...this.current, startMs: this.elapsedMs }] : [];
+    return [...current, ...this.queue];
+  }
+
   /** Tracks waiting plus the one playing. */
   get size() {
     return this.queue.length + (this.current ? 1 : 0);
@@ -156,7 +164,7 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
     this.running = true;
     while (!this.closed && this.queue.length > 0) {
       this.current = this.queue.shift()!;
-      this.elapsedMs = 0;
+      this.elapsedMs = this.current.startMs ?? 0;
       this.paused = false;
       this.emit('change');
       this.emit('trackStart', this.current.track);
@@ -175,7 +183,7 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
   }
 
   private async play(item: QueuedTrack) {
-    const pcm = spawnPcm(item.media.pageUrl);
+    const pcm = spawnPcm(item.media.pageUrl, item.startMs);
     let aborted = false;
     this.abortCurrent = () => {
       aborted = true;

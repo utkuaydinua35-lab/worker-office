@@ -4,11 +4,14 @@ import { MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { useUnread } from '@/components/providers/unread-provider';
+import { MentionBadge } from '@/components/server/server-channel';
 import { cn } from '@/lib/utils';
 
 /** Top of the server rail: Discord's "Direct Messages" home. */
 export function NavigationDmButton() {
   const active = usePathname().startsWith('/me');
+  const { dmUnreadCount } = useUnread();
 
   return (
     <Link href="/me" title="Direkt Mesajlar" aria-label="Direkt Mesajlar" className="group relative flex w-full justify-center">
@@ -28,6 +31,9 @@ export function NavigationDmButton() {
       >
         <MessageSquare className="h-6 w-6" />
       </span>
+      {dmUnreadCount > 0 && (
+        <MentionBadge count={dmUnreadCount} className="absolute bottom-0 right-3 ring-4 ring-[#1e1f22]" />
+      )}
     </Link>
   );
 }

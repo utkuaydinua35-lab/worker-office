@@ -89,14 +89,34 @@ export function UserPanel({ user }: UserPanelProps) {
           disabled={voice.serverMuted}
           danger={micOff}
         >
-          {micOff ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          {micOff ? (
+            <MicOff className="h-4 w-4" />
+          ) : (
+            <Mic
+              className={cn(
+                'h-4 w-4',
+                voice.pushToTalk.enabled && voice.channel && voice.talking && 'text-status-online',
+              )}
+            />
+          )}
         </PanelButton>
         <PanelButton
-          label={voice.deafened ? 'Sağırlaştırmayı kaldır' : 'Sağırlaştır'}
+          label={
+            voice.serverDeafened
+              ? 'Sunucuda sağırlaştırıldın'
+              : voice.deafened
+                ? 'Sağırlaştırmayı kaldır'
+                : 'Sağırlaştır'
+          }
           onClick={voice.toggleDeafen}
-          danger={voice.deafened}
+          disabled={voice.serverDeafened}
+          danger={voice.deafened || voice.serverDeafened}
         >
-          {voice.deafened ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
+          {voice.deafened || voice.serverDeafened ? (
+            <HeadphoneOff className="h-4 w-4" />
+          ) : (
+            <Headphones className="h-4 w-4" />
+          )}
         </PanelButton>
         <Link
           href="/settings"

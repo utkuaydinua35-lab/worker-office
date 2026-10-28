@@ -10,7 +10,7 @@ import {
 } from '@livekit/components-react';
 import type { MemberRole } from '@prisma/client';
 import { Track, type Participant } from 'livekit-client';
-import { MicOff, MoreVertical, Music, VolumeX } from 'lucide-react';
+import { HeadphoneOff, MicOff, MoreVertical, Music, VolumeX } from 'lucide-react';
 import { useState } from 'react';
 
 import { ParticipantMenu } from '@/components/voice/participant-menu';
@@ -22,6 +22,7 @@ import {
   BOT_ATTRIBUTE,
   OWNER_ATTRIBUTE,
   ROLE_ATTRIBUTE,
+  SERVER_DEAFENED_ATTRIBUTE,
   SERVER_MUTED_ATTRIBUTE,
 } from '@/lib/voice-attributes';
 
@@ -54,6 +55,7 @@ export function ParticipantCard({ participant, serverId, currentUser, compact }:
 
   const displayName = name || participant.identity;
   const serverMuted = attributes?.[SERVER_MUTED_ATTRIBUTE] === '1';
+  const serverDeafened = attributes?.[SERVER_DEAFENED_ATTRIBUTE] === '1';
   const targetRole = ROLES.find((r) => r === attributes?.[ROLE_ATTRIBUTE]) ?? 'GUEST';
   const target = { role: targetRole, isOwner: attributes?.[OWNER_ATTRIBUTE] === '1' };
   // The music bot isn't a member: no server mute, but local volume works on it like on anyone.
@@ -105,6 +107,9 @@ export function ParticipantCard({ participant, serverId, currentUser, compact }:
         ) : (
           micMuted && <MicOff className="h-3.5 w-3.5 shrink-0" aria-label="Mikrofon kapalı" />
         )}
+        {serverDeafened && (
+          <HeadphoneOff className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Sunucuda sağırlaştırıldı" />
+        )}
         {audio.prefs.muted && <VolumeX className="h-3.5 w-3.5 shrink-0" aria-label="Yerel olarak susturuldu" />}
       </div>
 
@@ -118,6 +123,11 @@ export function ParticipantCard({ participant, serverId, currentUser, compact }:
           serverMute={
             !isBot && canServerMute(currentUser, target)
               ? { serverId, userId: participant.identity, muted: serverMuted }
+              : null
+          }
+          serverDeafen={
+            !isBot && canServerMute(currentUser, target)
+              ? { serverId, userId: participant.identity, deafened: serverDeafened }
               : null
           }
           disconnect={

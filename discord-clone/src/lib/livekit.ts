@@ -42,7 +42,12 @@ export async function closeVoiceRooms(voiceChannelIds: string[]) {
 
 // Participant attributes (set in the token, updated by the mute API) that
 // other clients read: the server-mute icon, and who may moderate whom.
-export { OWNER_ATTRIBUTE, ROLE_ATTRIBUTE, SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
+export {
+  OWNER_ATTRIBUTE,
+  ROLE_ATTRIBUTE,
+  SERVER_DEAFENED_ATTRIBUTE,
+  SERVER_MUTED_ATTRIBUTE,
+} from '@/lib/voice-attributes';
 
 const ALL_SOURCES = [
   TrackSource.MICROPHONE,
@@ -52,14 +57,14 @@ const ALL_SOURCES = [
 ];
 
 /**
- * Publish permissions. A server-muted member keeps camera and screen share
- * but LiveKit itself refuses their microphone, so muting doesn't depend on
- * the client behaving.
+ * Room permissions. A server-muted member keeps camera and screen share but
+ * LiveKit itself refuses their microphone; a server-deafened one can't
+ * subscribe to anything. Neither depends on the client behaving.
  */
-export function voicePermission(serverMuted: boolean) {
+export function voicePermission(serverMuted: boolean, serverDeafened = false) {
   return {
     canPublish: true,
-    canSubscribe: true,
+    canSubscribe: !serverDeafened,
     canPublishData: false,
     canPublishSources: serverMuted
       ? ALL_SOURCES.filter((s) => s !== TrackSource.MICROPHONE)

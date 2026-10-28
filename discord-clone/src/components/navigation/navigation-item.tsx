@@ -3,11 +3,14 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
+import { useUnread } from '@/components/providers/unread-provider';
+import { MentionBadge } from '@/components/server/server-channel';
 import { cn } from '@/lib/utils';
 
 export function NavigationItem({ id, name, iconUrl }: { id: string; name: string; iconUrl: string | null }) {
   const params = useParams<{ serverId?: string }>();
   const active = params.serverId === id;
+  const unread = useUnread().server(id);
   const initials = name
     .split(/\s+/)
     .map((w) => w[0])
@@ -21,7 +24,7 @@ export function NavigationItem({ id, name, iconUrl }: { id: string; name: string
       <span
         className={cn(
           'absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-foreground transition-all',
-          active ? 'h-10' : 'h-0 group-hover:h-5',
+          active ? 'h-10' : unread.unread ? 'h-2 group-hover:h-5' : 'h-0 group-hover:h-5',
         )}
       />
       <span
@@ -39,6 +42,9 @@ export function NavigationItem({ id, name, iconUrl }: { id: string; name: string
           initials
         )}
       </span>
+      {unread.mentions > 0 && (
+        <MentionBadge count={unread.mentions} className="absolute bottom-0 right-3 ring-4 ring-[#1e1f22]" />
+      )}
     </Link>
   );
 }

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { useSocket } from '@/components/providers/socket-provider';
+import { useUnread } from '@/components/providers/unread-provider';
 import { UserAvatar } from '@/components/user/user-avatar';
 import type { PresencePayload } from '@/lib/socket/events';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,7 @@ export function DmList({ entries }: { entries: DmListEntry[] }) {
   const router = useRouter();
   const { socket } = useSocket();
   const params = useParams<{ conversationId?: string }>();
+  const unread = useUnread();
   const [overrides, setOverrides] = useState<Map<string, UserStatusValue>>(new Map());
   useEffect(() => setOverrides(new Map()), [entries]);
 
@@ -65,7 +67,14 @@ export function DmList({ entries }: { entries: DmListEntry[] }) {
             status={overrides.get(e.userId) ?? e.status}
             className="h-8 w-8 text-xs"
           />
-          <span className="truncate text-sm font-medium">{e.username}</span>
+          <span
+            className={cn(
+              'truncate text-sm',
+              unread.conversationUnread(e.conversationId) ? 'font-bold text-foreground' : 'font-medium',
+            )}
+          >
+            {e.username}
+          </span>
         </Link>
       ))}
     </div>

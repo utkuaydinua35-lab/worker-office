@@ -13,10 +13,7 @@ export const usernameSchema = z
 export const registerSchema = z.object({
   username: usernameSchema,
   email: z.string().trim().toLowerCase().email('Geçerli bir e-posta girin'),
-  password: z
-    .string()
-    .min(8, 'Şifre en az 8 karakter olmalı')
-    .max(72, 'Şifre en fazla 72 karakter olabilir'), // bcrypt ignores bytes past 72
+  password: z.string().min(8, 'Şifre en az 8 karakter olmalı').max(72, 'Şifre en fazla 72 karakter olabilir'), // bcrypt ignores bytes past 72
   // Checked against REGISTRATION_CODE when that's set (see lib/registration.ts).
   registrationCode: z.string().max(200).optional(),
 });
@@ -92,9 +89,27 @@ export const createMessageSchema = z
   .object({
     content: z.string().trim().max(MESSAGE_MAX_LENGTH, 'Mesaj en fazla 2000 karakter olabilir'),
     fileUrl: z.string().max(500).nullish(),
+    replyToId: z.string().uuid().nullish(),
   })
   .refine((m) => m.content.length > 0 || !!m.fileUrl, { message: 'Mesaj boş olamaz' });
 
 export const updateMessageSchema = z.object({
   content: z.string().trim().max(MESSAGE_MAX_LENGTH, 'Mesaj en fazla 2000 karakter olabilir'),
 });
+
+/** One emoji (possibly a ZWJ sequence or flag), as the picker inserts it. */
+export const reactionSchema = z.object({
+  emoji: z
+    .string()
+    .min(1)
+    .max(32)
+    .refine(
+      (e) =>
+        /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u200d\ufe0f\u20e3#*0-9]|\p{Emoji_Modifier})+$/u.test(
+          e,
+        ) && /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u.test(e),
+      { message: 'Geçersiz emoji' },
+    ),
+});
+
+export const pinSchema = z.object({ pinned: z.boolean() });

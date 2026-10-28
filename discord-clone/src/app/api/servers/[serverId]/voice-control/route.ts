@@ -4,7 +4,13 @@ import { z } from 'zod';
 import { forbidden, invalid, jsonError, notFound, readJson, unauthorized } from '@/lib/api';
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { removeFromVoiceRooms, roomService, voiceRoomName } from '@/lib/livekit';
+import {
+  removeFromVoiceRooms,
+  roomService,
+  SERVER_DEAFENED_ATTRIBUTE,
+  voicePermission,
+  voiceRoomName,
+} from '@/lib/livekit';
 import { canManageChannels, canServerMute, getMembership } from '@/lib/membership';
 import { getMusicService } from '@/lib/music/bridge';
 import { emitVoiceMove } from '@/lib/socket/emit';
@@ -14,7 +20,8 @@ export const runtime = 'nodejs';
 
 const bodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('disconnect'), userId: z.string().min(1) }),
-  z.object({ action: z.literal('move'), userId: z.string().uuid(), channelId: z.string().uuid() }),
+  z.object({ action: z.literal('move'), userId: z.string().min(1), channelId: z.string().uuid() }),
+  z.object({ action: z.literal('deafen'), userId: z.string().uuid(), deafened: z.boolean() }),
 ]);
 
 type Ctx = { params: Promise<{ serverId: string }> };
@@ -31,10 +38,11 @@ async function currentVoiceChannel(identity: string, voiceChannelIds: string[]) 
 }
 
 /**
- * Discord's "Disconnect" and "Move To" for voice channels.
- * JSON { action: 'disconnect', userId } | { action: 'move', userId, channelId }.
+ * Discord's "Disconnect", "Move To" and "Server Deafen" for voice channels.
+ * JSON { action: 'disconnect', userId } | { action: 'move', userId, channelId }
+ *    | { action: 'deafen', userId, deafened }.
  * People: MODERATOR or above, over members they outrank (like server mute).
- * The music bot: whoever may !stop it (moderators, or anyone in its channel).
+ * The music bot: whoever may !stop it can disconnect it; moderators can move it.
  */
 export async function POST(req: Request, ctx: Ctx) {
   const params = await ctx.params;
@@ -61,18 +69,23 @@ export async function POST(req: Request, ctx: Ctx) {
   const voiceIds = server.channels.map((c) => c.id);
 
   if (body.userId === BOT_IDENTITY) {
-    if (body.action !== 'disconnect') return jsonError(400, 'Müzik botu taşınamaz; !play ile istediğin kanala çağır.');
     const service = getMusicService();
-    const result = await service?.control(
-      {
-        serverId: params.serverId,
-        userId: actorId,
-        username: actorUser.username,
-        role: actor.role,
-        isOwner: actorIsOwner,
-      },
-      'stop',
-    );
+    const caller = {
+      serverId: params.serverId,
+      userId: actorId,
+      username: actorUser.username,
+      role: actor.role,
+      isOwner: actorIsOwner,
+    };
+    if (body.action === 'move') {
+      const to = server.channels.find((c) => c.id === body.channelId);
+      if (!to) return notFound('Ses kanalı');
+      const moved = await service?.move(caller, to);
+      if (!moved) return jsonError(503, 'Müzik botu çalışmıyor');
+      return moved.ok ? new NextResponse(null, { status: 204 }) : jsonError(409, moved.error);
+    }
+    if (body.action !== 'disconnect') return jsonError(400, 'Müzik botu sağırlaştırılamaz.');
+    const result = await service?.control(caller, 'stop');
     if (result?.ok) return new NextResponse(null, { status: 204 });
     // No player behind it (a leftover connection): moderators can still clear it.
     if (!actorIsOwner && !canManageChannels(actor.role)) {
@@ -91,6 +104,21 @@ export async function POST(req: Request, ctx: Ctx) {
     )
   ) {
     return forbidden();
+  }
+
+  if (body.action === 'deafen') {
+    // The DB flag is the source of truth (the token endpoint applies it on every join).
+    await db.member.update({ where: { id: target.id }, data: { serverDeafened: body.deafened } });
+    const room = await currentVoiceChannel(body.userId, voiceIds);
+    if (room) {
+      await roomService()
+        ?.updateParticipant(voiceRoomName(room), body.userId, {
+          permission: voicePermission(target.serverMuted, body.deafened),
+          attributes: { [SERVER_DEAFENED_ATTRIBUTE]: body.deafened ? '1' : '0' },
+        })
+        .catch(() => {}); // left meanwhile
+    }
+    return NextResponse.json({ userId: body.userId, serverDeafened: body.deafened });
   }
 
   const from = await currentVoiceChannel(body.userId, voiceIds);

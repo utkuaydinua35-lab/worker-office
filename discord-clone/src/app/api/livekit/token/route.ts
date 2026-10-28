@@ -8,6 +8,7 @@ import {
   livekitConfig,
   OWNER_ATTRIBUTE,
   ROLE_ATTRIBUTE,
+  SERVER_DEAFENED_ATTRIBUTE,
   SERVER_MUTED_ATTRIBUTE,
   voicePermission,
   voiceRoomName,
@@ -18,7 +19,7 @@ export const runtime = 'nodejs';
 
 const TOKEN_TTL = '6h';
 
-/** GET ?channelId= → { token, url, serverMuted } for joining that voice channel's LiveKit room. */
+/** GET ?channelId= → { token, url, serverMuted, serverDeafened } for joining that voice channel's LiveKit room. */
 export async function GET(req: Request) {
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
@@ -47,6 +48,7 @@ export async function GET(req: Request) {
     // Role attributes let other clients decide whether to offer "server mute".
     attributes: {
       [SERVER_MUTED_ATTRIBUTE]: access.member.serverMuted ? '1' : '0',
+      [SERVER_DEAFENED_ATTRIBUTE]: access.member.serverDeafened ? '1' : '0',
       [ROLE_ATTRIBUTE]: access.member.role,
       [OWNER_ATTRIBUTE]: access.channel.server.ownerId === userId ? '1' : '0',
     },
@@ -55,12 +57,13 @@ export async function GET(req: Request) {
   token.addGrant({
     roomJoin: true,
     room: voiceRoomName(access.channel.id),
-    ...voicePermission(access.member.serverMuted),
+    ...voicePermission(access.member.serverMuted, access.member.serverDeafened),
   });
 
   return NextResponse.json({
     token: await token.toJwt(),
     url: cfg.wsUrl,
     serverMuted: access.member.serverMuted,
+    serverDeafened: access.member.serverDeafened,
   });
 }

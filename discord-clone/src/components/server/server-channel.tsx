@@ -7,6 +7,7 @@ import { useState } from 'react';
 
 import { ChannelModal } from '@/components/modals/channel-modal';
 import { ConfirmModal } from '@/components/modals/confirm-modal';
+import { useUnread } from '@/components/providers/unread-provider';
 import { useNavigateFresh } from '@/hooks/use-navigate-fresh';
 import { apiFetch } from '@/lib/client-api';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,7 @@ export function ServerChannel({ serverId, channel, canManage }: ServerChannelPro
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const active = params.channelId === channel.id;
+  const unread = useUnread().channel(channel.id);
   const Icon = channel.type === 'VOICE' ? Volume2 : Hash;
 
   return (
@@ -32,14 +34,18 @@ export function ServerChannel({ serverId, channel, canManage }: ServerChannelPro
       className={cn(
         'group flex items-center gap-1.5 rounded px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground',
         active && 'bg-secondary text-foreground',
+        unread.unread && !active && 'text-foreground',
       )}
+      data-unread={unread.unread || undefined}
     >
-      <Link
-        href={`/servers/${serverId}/channels/${channel.id}`}
-        className="flex min-w-0 flex-1 items-center gap-1.5"
-      >
+      {/* Discord's unread dot at the column's left edge. */}
+      {unread.unread && !active && <span className="-ml-2 h-2 w-1 rounded-r-full bg-foreground" />}
+      <Link href={`/servers/${serverId}/channels/${channel.id}`} className="flex min-w-0 flex-1 items-center gap-1.5">
         <Icon className="h-5 w-5 shrink-0" />
-        <span className="truncate text-sm font-medium">{channel.name}</span>
+        <span className={cn('truncate text-sm', unread.unread && !active ? 'font-semibold' : 'font-medium')}>
+          {channel.name}
+        </span>
+        {unread.mentions > 0 && <MentionBadge count={unread.mentions} className="ml-auto" />}
       </Link>
 
       {canManage && (
@@ -55,21 +61,15 @@ export function ServerChannel({ serverId, channel, canManage }: ServerChannelPro
 
       {canManage && (
         <>
-          <ChannelModal
-            mode="edit"
-            serverId={serverId}
-            channel={channel}
-            open={editOpen}
-            onOpenChange={setEditOpen}
-          />
+          <ChannelModal mode="edit" serverId={serverId} channel={channel} open={editOpen} onOpenChange={setEditOpen} />
           <ConfirmModal
             open={deleteOpen}
             onOpenChange={setDeleteOpen}
             title="Kanalı Sil"
             description={
               <>
-                <b>#{channel.name}</b> kanalını silmek istediğine emin misin? Tüm mesajları da silinecek ve bu
-                işlem geri alınamaz.
+                <b>#{channel.name}</b> kanalını silmek istediğine emin misin? Tüm mesajları da silinecek ve bu işlem
+                geri alınamaz.
               </>
             }
             confirmLabel="Kanalı Sil"
@@ -82,5 +82,20 @@ export function ServerChannel({ serverId, channel, canManage }: ServerChannelPro
         </>
       )}
     </div>
+  );
+}
+
+/** Red @mention count, as on Discord's channels and server icons. */
+export function MentionBadge({ count, className }: { count: number; className?: string }) {
+  return (
+    <span
+      aria-label={`${count} bahsetme`}
+      className={cn(
+        'min-w-[18px] rounded-full bg-destructive px-1 text-center text-[11px] font-bold leading-[18px] text-white',
+        className,
+      )}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
   );
 }

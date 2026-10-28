@@ -50,15 +50,29 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const parsed = createMessageSchema.safeParse(await readJson(req));
   if (!parsed.success) return invalid(parsed.error);
-  const { content, fileUrl } = parsed.data;
+  const { content, fileUrl, replyToId } = parsed.data;
   if (fileUrl && !isOwnUploadUrl(fileUrl, 'attachments')) return jsonError(400, 'Geçersiz dosya');
+  if (replyToId) {
+    const target = await db.directMessage.findUnique({ where: { id: replyToId }, select: { conversationId: true } });
+    if (target?.conversationId !== params.conversationId) return jsonError(400, 'Yanıtlanan mesaj bulunamadı');
+  }
 
   const row = await db.directMessage.create({
-    data: { content, fileUrl: fileUrl ?? null, userId, conversationId: params.conversationId },
+    data: {
+      content,
+      fileUrl: fileUrl ?? null,
+      userId,
+      conversationId: params.conversationId,
+      replyToId: replyToId ?? null,
+    },
     select: directMessageSelect,
   });
   const message = toDirectMessageDTO(row);
   emitMessage('conversation', 'message:new', message);
-  emitConversationActivity(params.conversationId, [userId, access.otherUserId]);
+  emitConversationActivity(params.conversationId, [userId, access.otherUserId], {
+    authorId: userId,
+    authorName: row.user.username,
+    preview: content.slice(0, 120),
+  });
   return NextResponse.json(message, { status: 201 });
 }

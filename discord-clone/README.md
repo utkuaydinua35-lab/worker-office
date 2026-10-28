@@ -80,6 +80,18 @@ src/components/voice/
 - **Ses kanalındakiler:** kanal listesinde her ses kanalının altında kimlerin (botu da) olduğu, mikrofon/susturma durumlarıyla görünür. Bilgi LiveKit sunucu API'sinden okunur (`src/services/voice-presence.ts`; 4 saniyede bir ve biri katılınca/ayrılınca hemen). Aynı kanaldaysan konuşanların halkası da yanar.
 - **Kayıt kodu:** `REGISTRATION_CODE` tanımlıysa kayıt yalnızca bu kodu bilenlere açıktır.
 
+## Discord özellikleri
+
+- **Tepkiler:** mesajın üstündeki gülen yüz ya da altındaki ➕ ile emoji tepkisi; aynı emojiye tıklamak ekler/kaldırır. Mesaj başına en fazla 20 farklı emoji.
+- **Yanıtlama:** mesajın üstündeki ok ile; yanıt, alıntılanan mesajın özetini gösterir ve tıklayınca ona kaydırır. Yanıtlanan kişi bahsedilmiş sayılır.
+- **Sabitleme:** kanallarda moderatörler, DM'lerde iki taraf da sabitleyebilir (en fazla 50). Başlıktaki raptiye sabitlenmiş mesajları listeler.
+- **@bahsetme:** `@` yazınca üye önerileri çıkar (ok tuşları + Enter/Tab). Senden bahseden mesaj sarı vurgulanır, kanal ve sunucu simgesinde kırmızı sayı çıkar, sekme başlığına `(n)` eklenir.
+- **Okunmamış işaretleri:** yeni mesajı olan kanal kalın ve beyaz görünür, sunucu simgesinin solunda küçük bir çizgi çıkar. Okuma durumu `ChannelRead` tablosunda tutulur; DM'lerin okunmamış durumu yalnızca açık oturumda tutulur.
+- **Masaüstü bildirimleri:** Ayarlar → Ses ve Bildirimler. Bahsetmelerde ve DM'lerde, sohbet ekranda değilken.
+- **Sunucuda sağırlaştırma:** moderatörler bir kişinin kanaldakileri duymasını kapatır. LiveKit abonelik iznini kaldırdığı için istemciye güvenmez; `Member.serverDeafened` ile kalıcıdır.
+- **Bağlantıyı kes / taşı:** ses kanalı listesinde kişiye (ya da müzik botuna) sağ tık. Bot taşınınca sıra ve çalan şarkı kaldığı yerden devam eder.
+- **Bas-konuş:** Ayarlar → Ses ve Bildirimler; tuş seçilebilir (varsayılan V). Tarayıcı yalnızca Hasbihal sekmesi seçiliyken tuşları görebilir; metin kutusuna yazarken mikrofon açılmaz.
+
 ## Müzik botu (Aşama 5)
 
 Gereken programlar: `brew install yt-dlp ffmpeg` (YouTube sık değiştiği için yt-dlp'yi güncel tutun: `brew upgrade yt-dlp`).

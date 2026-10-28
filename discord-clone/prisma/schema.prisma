@@ -44,9 +44,12 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  ownedServers Server[]  @relation("ServerOwner")
-  memberships  Member[]
-  messages     Message[]
+  ownedServers    Server[]         @relation("ServerOwner")
+  memberships     Member[]
+  messages        Message[]
+  reactions       Reaction[]
+  directReactions DirectReaction[]
+  channelReads    ChannelRead[]
 
   // A Conversation has two fixed participants; the relation pair is split so
   // both sides can be queried ("conversations where I am userOne or userTwo").
@@ -74,15 +77,17 @@ model Server {
 }
 
 model Member {
-  id          String     @id @default(uuid())
-  role        MemberRole @default(GUEST)
+  id             String     @id @default(uuid())
+  role           MemberRole @default(GUEST)
   // Server mute (Discord's): set by a moderator, applies to every voice
   // channel of the server and survives leaving and rejoining.
-  serverMuted Boolean    @default(false)
-  userId      String
-  serverId    String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  serverMuted    Boolean    @default(false)
+  // Server deafen: can't hear anyone in the server's voice channels. Same lifetime as serverMuted.
+  serverDeafened Boolean    @default(false)
+  userId         String
+  serverId       String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
@@ -100,10 +105,23 @@ model Channel {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  server   Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server   Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
   messages Message[]
+  reads    ChannelRead[]
 
   @@index([serverId])
+}
+
+// How far each member has read a text channel (unread markers, mention badges).
+model ChannelRead {
+  userId     String
+  channelId  String
+  lastReadAt DateTime
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
 }
 
 model Message {
@@ -112,17 +130,38 @@ model Message {
   fileUrl   String?
   // Soft delete keeps the row so the chat can render "message deleted".
   deleted   Boolean  @default(false)
+  pinned    Boolean  @default(false)
+  // Ids of the members this message @mentions, resolved when it was sent.
+  mentions  String[] @default([])
+  replyToId String?
   userId    String
   channelId String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  replyTo   Message?   @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[]  @relation("MessageReplies")
+  reactions Reaction[]
 
   // Cursor pagination reads a channel's messages newest-first.
   @@index([channelId, createdAt])
+  @@index([channelId, pinned])
   @@index([userId])
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  emoji     String   @db.VarChar(64)
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
 }
 
 // ─── Direct messages ────────────────────────────────────────────────────
@@ -148,14 +187,33 @@ model DirectMessage {
   content        String   @db.Text
   fileUrl        String?
   deleted        Boolean  @default(false)
+  pinned         Boolean  @default(false)
+  replyToId      String?
   userId         String
   conversationId String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  replyTo      DirectMessage?   @relation("DirectMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      DirectMessage[]  @relation("DirectMessageReplies")
+  reactions    DirectReaction[]
 
   @@index([conversationId, createdAt])
+  @@index([conversationId, pinned])
   @@index([userId])
+}
+
+model DirectReaction {
+  id              String   @id @default(uuid())
+  emoji           String   @db.VarChar(64)
+  userId          String
+  directMessageId String
+  createdAt       DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  directMessage DirectMessage @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+
+  @@unique([directMessageId, userId, emoji])
 }

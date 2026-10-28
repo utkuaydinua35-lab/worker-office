@@ -1,14 +1,15 @@
 'use client';
 
 import type { MemberRole } from '@prisma/client';
-import { Edit, FileText, Music, Trash } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CornerUpLeft, Edit, FileText, Music, Pin, PinOff, Reply, SmilePlus, Trash } from 'lucide-react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 
+import { EmojiPicker } from '@/components/chat/emoji-picker';
 import { ConfirmModal } from '@/components/modals/confirm-modal';
 import { UserAvatar } from '@/components/user/user-avatar';
 import { messageUrl, type ChatKind } from '@/lib/chat-target';
 import { apiFetch, errorMessage } from '@/lib/client-api';
-import type { MessageDTO } from '@/lib/messages';
+import { MENTION_PATTERN, type MessageDTO } from '@/lib/messages';
 import { cn } from '@/lib/utils';
 import { MESSAGE_MAX_LENGTH } from '@/lib/validators';
 
@@ -21,6 +22,37 @@ const shortTime = new Intl.DateTimeFormat('tr-TR', { timeStyle: 'short' });
 
 const isImage = (url: string) => /\.(png|jpe?g|webp|gif)$/i.test(url);
 
+/** Scrolls to a loaded message and flashes it; false if it isn't loaded. */
+export function jumpToMessage(messageId: string) {
+  const el = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
+  if (!el) return false;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.classList.add('bg-primary/20');
+  setTimeout(() => el.classList.remove('bg-primary/20'), 1500);
+  return true;
+}
+
+/** Message text with @mentions highlighted, as Discord does. */
+function MessageText({ content }: { content: string }) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of content.matchAll(MENTION_PATTERN)) {
+    const start = m.index!;
+    // "@ali." at a sentence's end: the dot isn't part of the name.
+    const token = m[0].replace(/\.+$/, '');
+    if (token.length < 3) continue;
+    parts.push(<Fragment key={last}>{content.slice(last, start)}</Fragment>);
+    parts.push(
+      <span key={start} className="rounded bg-primary/30 px-0.5 font-medium text-[#c9cdfb]">
+        {token}
+      </span>,
+    );
+    last = start + token.length;
+  }
+  parts.push(<Fragment key={last}>{content.slice(last)}</Fragment>);
+  return <>{parts}</>;
+}
+
 interface ChatItemProps {
   kind: ChatKind;
   message: MessageDTO;
@@ -28,9 +60,10 @@ interface ChatItemProps {
   /** Same author within a few minutes: render without avatar and name. */
   continuation: boolean;
   onChanged: (message: MessageDTO) => void;
+  onReply: (message: MessageDTO) => void;
 }
 
-export function ChatItem({ kind, message, currentUser, continuation, onChanged }: ChatItemProps) {
+export function ChatItem({ kind, message, currentUser, continuation, onChanged, onReply }: ChatItemProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
   const [saving, setSaving] = useState(false);
@@ -42,9 +75,27 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged }
   const isModerator = currentUser.role === 'ADMIN' || currentUser.role === 'MODERATOR';
   const canEdit = isOwn && !message.deleted;
   const canDelete = (isOwn || isModerator) && !message.deleted;
+  // DMs have no moderators: either side may pin.
+  const canPin = !message.deleted && (kind === 'conversation' || isModerator);
+  const mentionsMe = !message.deleted && message.mentions.includes(currentUser.id);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function act(path: 'reactions' | 'pin', body: object) {
+    setActionError(null);
+    try {
+      onChanged(
+        await apiFetch<MessageDTO>(`${messageUrl(kind, message.id)}/${path}`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+      );
+    } catch (err) {
+      setActionError(errorMessage(err));
+    }
+  }
+  const react = (emoji: string) => void act('reactions', { emoji });
   const edited =
-    !message.deleted &&
-    Date.parse(message.updatedAt) - Date.parse(message.createdAt) > EDITED_THRESHOLD_MS;
+    !message.deleted && Date.parse(message.updatedAt) - Date.parse(message.createdAt) > EDITED_THRESHOLD_MS;
   const created = new Date(message.createdAt);
 
   useEffect(() => {
@@ -80,24 +131,39 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged }
 
   return (
     <div
+      data-message-id={message.id}
       className={cn(
-        'group relative flex gap-4 px-4 hover:bg-black/5',
-        continuation ? 'py-0.5' : 'mt-3 py-0.5',
+        'group relative flex flex-wrap gap-x-4 px-4 transition-colors hover:bg-black/5',
+        continuation && !message.replyTo ? 'py-0.5' : 'mt-3 py-0.5',
+        mentionsMe && 'border-l-2 border-status-idle bg-status-idle/10 hover:bg-status-idle/15',
       )}
     >
+      {message.replyTo && (
+        <button
+          type="button"
+          onClick={() => jumpToMessage(message.replyTo!.id)}
+          className="mb-0.5 ml-5 flex w-full min-w-0 basis-full items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-foreground"
+        >
+          <CornerUpLeft className="h-3.5 w-3.5 shrink-0 -scale-x-100" />
+          <span className="font-semibold">@{message.replyTo.user.username}</span>
+          <span className="truncate">
+            {message.replyTo.deleted
+              ? 'Orijinal mesaj silindi.'
+              : message.replyTo.content || (message.replyTo.hasFile ? 'Ek' : '')}
+          </span>
+        </button>
+      )}
       <div className="w-10 shrink-0">
         {continuation ? (
           <span className="invisible block pt-1 text-right text-[10px] text-muted-foreground group-hover:visible">
             {shortTime.format(created)}
           </span>
+        ) : message.user.isBot ? (
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-status-online text-white">
+            <Music className="h-5 w-5" />
+          </span>
         ) : (
-          message.user.isBot ? (
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-status-online text-white">
-              <Music className="h-5 w-5" />
-            </span>
-          ) : (
-            <UserAvatar username={message.user.username} avatarUrl={message.user.avatarUrl} />
-          )
+          <UserAvatar username={message.user.username} avatarUrl={message.user.avatarUrl} />
         )}
       </div>
 
@@ -113,6 +179,7 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged }
             <time className="text-xs text-muted-foreground" dateTime={message.createdAt}>
               {fullTime.format(created)}
             </time>
+            {message.pinned && <Pin className="h-3 w-3 self-center text-muted-foreground" aria-label="Sabitlendi" />}
           </div>
         )}
 
@@ -145,7 +212,7 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged }
         ) : (
           message.content && (
             <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed">
-              {message.content}
+              <MessageText content={message.content} />
               {edited && <span className="ml-1 text-[10px] text-muted-foreground">(düzenlendi)</span>}
             </p>
           )
@@ -175,10 +242,72 @@ export function ChatItem({ kind, message, currentUser, continuation, onChanged }
             )}
           </div>
         )}
+
+        {message.reactions.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {message.reactions.map((r) => {
+              const mine = r.userIds.includes(currentUser.id);
+              return (
+                <button
+                  key={r.emoji}
+                  type="button"
+                  data-reaction={r.emoji}
+                  title={mine ? 'Tepkini kaldır' : 'Tepki ver'}
+                  onClick={() => react(r.emoji)}
+                  className={cn(
+                    'flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-sm',
+                    mine ? 'border-primary bg-primary/20' : 'border-transparent bg-secondary hover:border-border',
+                  )}
+                >
+                  <span>{r.emoji}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">{r.userIds.length}</span>
+                </button>
+              );
+            })}
+            <EmojiPicker
+              onSelect={react}
+              side="bottom"
+              closeOnSelect
+              trigger={
+                <button
+                  type="button"
+                  title="Tepki ekle"
+                  className="flex items-center rounded-md bg-secondary px-1.5 py-0.5 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+                >
+                  <SmilePlus className="h-4 w-4" />
+                </button>
+              }
+            />
+          </div>
+        )}
+        {actionError && <p className="text-xs text-destructive">{actionError}</p>}
       </div>
 
-      {(canEdit || canDelete) && !editing && (
-        <div className="absolute -top-3 right-4 hidden items-center rounded-md border border-border bg-card shadow group-hover:flex">
+      {!message.deleted && !editing && (
+        <div className="absolute -top-3 right-4 hidden items-center rounded-md border border-border bg-card shadow group-hover:flex has-[[data-state=open]]:flex">
+          <EmojiPicker
+            onSelect={react}
+            side="left"
+            closeOnSelect
+            trigger={
+              <button type="button" title="Tepki ekle" className="p-1.5 hover:bg-secondary">
+                <SmilePlus className="h-4 w-4" />
+              </button>
+            }
+          />
+          <button type="button" title="Yanıtla" className="p-1.5 hover:bg-secondary" onClick={() => onReply(message)}>
+            <Reply className="h-4 w-4" />
+          </button>
+          {canPin && (
+            <button
+              type="button"
+              title={message.pinned ? 'Sabitlemeyi kaldır' : 'Sabitle'}
+              className="p-1.5 hover:bg-secondary"
+              onClick={() => void act('pin', { pinned: !message.pinned })}
+            >
+              {message.pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            </button>
+          )}
           {canEdit && (
             <button type="button" title="Düzenle" className="p-1.5 hover:bg-secondary" onClick={startEdit}>
               <Edit className="h-4 w-4" />

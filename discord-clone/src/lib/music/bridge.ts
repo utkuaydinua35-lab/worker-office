@@ -19,6 +19,8 @@ export interface MusicService {
   handleCommand(caller: MusicCaller & { textChannelId: string; content: string }): Promise<void>;
   /** The now-playing panel's buttons. */
   control(caller: MusicCaller, action: MusicAction): Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Moves the bot, queue and all, to another voice channel (moderators). */
+  move(caller: MusicCaller, voiceChannel: { id: string; name: string }): Promise<{ ok: true } | { ok: false; error: string }>;
   getState(serverId: string): MusicState | null;
 }
 

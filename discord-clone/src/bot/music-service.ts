@@ -83,6 +83,33 @@ export class DiscordCloneMusicService implements MusicService {
     });
   }
 
+  async move(caller: MusicCaller, voiceChannel: { id: string; name: string }) {
+    return this.withLock(caller.serverId, async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const player = this.players.get(caller.serverId);
+      if (!player) return { ok: false, error: 'Müzik botu şu an bir kanalda değil.' };
+      if (!caller.isOwner && !canManageChannels(caller.role)) {
+        return { ok: false, error: 'Botu yalnızca moderatörler taşıyabilir.' };
+      }
+      if (player.voiceChannel.id === voiceChannel.id) return { ok: true };
+
+      const carried = player.snapshot();
+      const { textChannelId } = player;
+      await this.destroy(caller.serverId);
+      let next: MusicPlayer;
+      try {
+        next = await this.createPlayer(caller.serverId, voiceChannel, textChannelId);
+      } catch (err) {
+        console.error('[music] move failed', err);
+        await this.post(textChannelId, `❌ ${voiceChannel.name} kanalına bağlanamadım.`);
+        return { ok: false, error: 'Ses kanalına bağlanamadım.' };
+      }
+      if (carried.length) next.enqueue(...carried);
+      else this.scheduleLeave(caller.serverId, 'idle');
+      await this.post(textChannelId, `🔀 ${voiceChannel.name} kanalına taşındım (${caller.username}).`);
+      return { ok: true };
+    });
+  }
+
   async shutdown() {
     await Promise.all([...this.players.keys()].map((serverId) => this.destroy(serverId)));
   }
@@ -197,11 +224,15 @@ export class DiscordCloneMusicService implements MusicService {
   private describeQueue(serverId: string) {
     const state = this.getState(serverId);
     if (!state?.nowPlaying) return '📭 Sıra boş.';
-    const lines = [`🎵 Şimdi: ${state.nowPlaying.title} [${formatDuration(state.nowPlaying.durationSec)}]${state.paused ? ' (duraklatıldı)' : ''}`];
+    const lines = [
+      `🎵 Şimdi: ${state.nowPlaying.title} [${formatDuration(state.nowPlaying.durationSec)}]${state.paused ? ' (duraklatıldı)' : ''}`,
+    ];
     if (state.queue.length === 0) lines.push('Sırada başka şarkı yok.');
-    state.queue.slice(0, 10).forEach((t, i) =>
-      lines.push(`${i + 1}. ${t.title} [${formatDuration(t.durationSec)}] — ${t.requestedBy.username}`),
-    );
+    state.queue
+      .slice(0, 10)
+      .forEach((t, i) =>
+        lines.push(`${i + 1}. ${t.title} [${formatDuration(t.durationSec)}] — ${t.requestedBy.username}`),
+      );
     if (state.queue.length > 10) lines.push(`…ve ${state.queue.length - 10} şarkı daha`);
     return lines.join('\n');
   }
@@ -246,7 +277,10 @@ export class DiscordCloneMusicService implements MusicService {
       console.warn('[music] disconnected from LiveKit', serverId);
       void this.destroy(serverId).then(() => this.post(player.textChannelId, CONNECTION_LOST_MESSAGE));
     });
-    this.audienceWatchers.set(serverId, setInterval(() => void this.checkAudience(serverId), AUDIENCE_POLL_MS));
+    this.audienceWatchers.set(
+      serverId,
+      setInterval(() => void this.checkAudience(serverId), AUDIENCE_POLL_MS),
+    );
 
     emitMusicState(serverId, player.getState());
     pokeVoicePresence();

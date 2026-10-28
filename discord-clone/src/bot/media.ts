@@ -204,7 +204,7 @@ const exitCode = (child: ChildProcess) =>
  * 403 when anything else fetches the media URL it resolved (the request has
  * to come in yt-dlp's own chunked, signed form).
  */
-export function spawnPcm(pageUrl: string): PcmPipeline {
+export function spawnPcm(pageUrl: string, startMs = 0): PcmPipeline {
   const ytdlp = spawn(
     YTDLP,
     ['-f', 'bestaudio/best', '--no-playlist', '--quiet', '--no-warnings', '-o', '-', '--', pageUrl],
@@ -212,7 +212,23 @@ export function spawnPcm(pageUrl: string): PcmPipeline {
   );
   const ffmpeg = spawn(
     FFMPEG,
-    ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-vn', '-f', 's16le', '-ac', String(CHANNELS), '-ar', String(SAMPLE_RATE), 'pipe:1'],
+    [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-i',
+      'pipe:0',
+      // A pipe can't seek: ffmpeg decodes up to here and drops it (resuming after a move).
+      ...(startMs > 0 ? ['-ss', (startMs / 1000).toFixed(2)] : []),
+      '-vn',
+      '-f',
+      's16le',
+      '-ac',
+      String(CHANNELS),
+      '-ar',
+      String(SAMPLE_RATE),
+      'pipe:1',
+    ],
     { stdio: ['pipe', 'pipe', 'pipe'] },
   );
   ytdlp.stdout.pipe(ffmpeg.stdin);

@@ -2,7 +2,7 @@
 
 import { useSpeakingParticipants } from '@livekit/components-react';
 import type { MemberRole } from '@prisma/client';
-import { MicOff, Music } from 'lucide-react';
+import { HeadphoneOff, MicOff, Music } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useSocket } from '@/components/providers/socket-provider';
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/context-menu';
 import { UserAvatar } from '@/components/user/user-avatar';
 import { errorMessage } from '@/lib/client-api';
-import { canServerMute } from '@/lib/roles';
+import { canManageChannels, canServerMute } from '@/lib/roles';
 import { cn } from '@/lib/utils';
 import { voiceControl } from '@/lib/voice-control';
 import type { VoiceChannelsState, VoiceMember } from '@/lib/voice-presence/store';
@@ -90,6 +90,7 @@ export function VoiceChannelMembers({ serverId, channelId, members, voiceChannel
           const canModerate =
             !m.isBot && m.id !== viewer.id && canServerMute(viewer, { role: m.role, isOwner: m.isOwner });
           const moveTargets = voiceChannels.filter((c) => c.id !== channelId);
+          const canMoveBot = viewer.isOwner || canManageChannels(viewer.role);
           const row = (
             <li
               key={m.id}
@@ -117,46 +118,43 @@ export function VoiceChannelMembers({ serverId, channelId, members, voiceChannel
               ) : (
                 m.micMuted && !m.isBot && <MicOff className="h-3.5 w-3.5 shrink-0" aria-label="Mikrofon kapalı" />
               )}
+              {m.serverDeafened && (
+                <HeadphoneOff className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Sunucuda sağırlaştırıldı" />
+              )}
             </li>
           );
           if (!m.isBot && !canModerate) return row;
+          const moveMenu = moveTargets.length > 0 && (m.isBot ? canMoveBot : true) && (
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>Taşı</ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-48">
+                {moveTargets.map((c) => (
+                  <ContextMenuItem key={c.id} onSelect={() => run({ action: 'move', userId: m.id, channelId: c.id })}>
+                    {c.name}
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          );
 
           return (
             <ContextMenu key={m.id} modal={false}>
               <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
               <ContextMenuContent className="w-52" aria-label={`${m.name} menüsü`}>
-                {m.isBot ? (
+                {moveMenu}
+                {!m.isBot && (
                   <ContextMenuItem
-                    className="text-destructive"
-                    onSelect={() => run({ action: 'disconnect', userId: m.id })}
+                    onSelect={() => run({ action: 'deafen', userId: m.id, deafened: !m.serverDeafened })}
                   >
-                    Botu Kanaldan Çıkar
+                    {m.serverDeafened ? 'Sağırlaştırmayı Kaldır' : 'Sunucuda Sağırlaştır'}
                   </ContextMenuItem>
-                ) : (
-                  <>
-                    {moveTargets.length > 0 && (
-                      <ContextMenuSub>
-                        <ContextMenuSubTrigger>Taşı</ContextMenuSubTrigger>
-                        <ContextMenuSubContent className="w-48">
-                          {moveTargets.map((c) => (
-                            <ContextMenuItem
-                              key={c.id}
-                              onSelect={() => run({ action: 'move', userId: m.id, channelId: c.id })}
-                            >
-                              {c.name}
-                            </ContextMenuItem>
-                          ))}
-                        </ContextMenuSubContent>
-                      </ContextMenuSub>
-                    )}
-                    <ContextMenuItem
-                      className="text-destructive"
-                      onSelect={() => run({ action: 'disconnect', userId: m.id })}
-                    >
-                      Bağlantıyı Kes
-                    </ContextMenuItem>
-                  </>
                 )}
+                <ContextMenuItem
+                  className="text-destructive"
+                  onSelect={() => run({ action: 'disconnect', userId: m.id })}
+                >
+                  {m.isBot ? 'Botu Kanaldan Çıkar' : 'Bağlantıyı Kes'}
+                </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
           );

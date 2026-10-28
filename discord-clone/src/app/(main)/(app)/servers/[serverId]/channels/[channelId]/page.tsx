@@ -6,7 +6,8 @@ import { ChatRoom } from '@/components/chat/chat-room';
 import { MemberSidebar } from '@/components/members/member-sidebar';
 import { VoiceChannelView } from '@/components/voice/voice-channel-view';
 import { getCurrentUserId } from '@/lib/auth';
-import { getChannelAccess } from '@/lib/membership';
+import { db } from '@/lib/db';
+import { canModerateMessages, getChannelAccess } from '@/lib/membership';
 
 export default async function ChannelPage(props: {
   params: Promise<{ serverId: string; channelId: string }>;
@@ -35,13 +36,25 @@ export default async function ChannelPage(props: {
     );
   }
 
+  const members = await db.member.findMany({
+    where: { serverId: params.serverId, userId: { not: userId } },
+    select: { user: { select: { id: true, username: true, avatarUrl: true } } },
+    orderBy: { user: { username: 'asc' } },
+  });
+  const target = { kind: 'channel' as const, id: channel.id };
+
   return (
     <>
-      <ChatHeader name={channel.name} type="TEXT" />
+      <ChatHeader
+        name={channel.name}
+        type="TEXT"
+        pins={{ target, canUnpin: currentUser.isOwner || canModerateMessages(member.role) }}
+      />
       <div className="flex min-h-0 flex-1">
         <ChatRoom
           key={channel.id}
-          target={{ kind: 'channel', id: channel.id }}
+          target={target}
+          mentionables={members.map((m) => m.user)}
           placeholder={`#${channel.name} kanalına mesaj gönder`}
           intro={
             <>

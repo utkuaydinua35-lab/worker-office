@@ -56,7 +56,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   const row = await db.directMessage.update({
     where: { id: params.messageId },
-    data: { deleted: true, content: '', fileUrl: null },
+    data: { deleted: true, content: '', fileUrl: null, pinned: false },
     select: directMessageSelect,
   });
   await deleteUpload(found.message.fileUrl);

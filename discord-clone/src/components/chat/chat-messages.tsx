@@ -8,6 +8,7 @@ import { ChatItem } from '@/components/chat/chat-item';
 import { Button } from '@/components/ui/button';
 import type { useChatMessages } from '@/hooks/use-chat-messages';
 import type { ChatKind } from '@/lib/chat-target';
+import type { MessageDTO } from '@/lib/messages';
 
 const NEAR_BOTTOM_PX = 150;
 const LOAD_OLDER_AT_PX = 80;
@@ -19,9 +20,10 @@ interface ChatMessagesProps {
   intro: React.ReactNode;
   currentUser: { id: string; role: MemberRole };
   chat: ReturnType<typeof useChatMessages>;
+  onReply: (message: MessageDTO) => void;
 }
 
-export function ChatMessages({ kind, intro, currentUser, chat }: ChatMessagesProps) {
+export function ChatMessages({ kind, intro, currentUser, chat, onReply }: ChatMessagesProps) {
   const { messages, status, hasMore, loadingOlder, loadOlder, upsert, retry } = chat;
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -91,6 +93,7 @@ export function ChatMessages({ kind, intro, currentUser, chat }: ChatMessagesPro
           const continuation =
             !!prev &&
             !prev.deleted &&
+            !message.replyTo && // a reply always shows who's talking, as in Discord
             prev.user.id === message.user.id &&
             Date.parse(message.createdAt) - Date.parse(prev.createdAt) < GROUP_WINDOW_MS;
           return (
@@ -101,6 +104,7 @@ export function ChatMessages({ kind, intro, currentUser, chat }: ChatMessagesPro
               currentUser={currentUser}
               continuation={continuation}
               onChanged={upsert}
+              onReply={onReply}
             />
           );
         })}

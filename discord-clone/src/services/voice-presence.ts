@@ -4,7 +4,13 @@ import { TrackSource, type ParticipantInfo } from 'livekit-server-sdk';
 import { db } from '@/lib/db';
 import { livekitConfig, roomService } from '@/lib/livekit';
 import { emitVoiceState } from '@/lib/socket/emit';
-import { BOT_ATTRIBUTE, OWNER_ATTRIBUTE, ROLE_ATTRIBUTE, SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
+import {
+  BOT_ATTRIBUTE,
+  OWNER_ATTRIBUTE,
+  ROLE_ATTRIBUTE,
+  SERVER_DEAFENED_ATTRIBUTE,
+  SERVER_MUTED_ATTRIBUTE,
+} from '@/lib/voice-attributes';
 import {
   voiceStateStore,
   type VoiceChannelsState,
@@ -33,6 +39,7 @@ function toMember(p: ParticipantInfo): VoiceMember {
     isBot: p.attributes[BOT_ATTRIBUTE] === '1',
     micMuted: !mic || mic.muted,
     serverMuted: p.attributes[SERVER_MUTED_ATTRIBUTE] === '1',
+    serverDeafened: p.attributes[SERVER_DEAFENED_ATTRIBUTE] === '1',
     role: ROLES.find((r) => r === p.attributes[ROLE_ATTRIBUTE]) ?? 'GUEST',
     isOwner: p.attributes[OWNER_ATTRIBUTE] === '1',
   };

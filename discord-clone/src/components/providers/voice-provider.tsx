@@ -14,12 +14,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useSocket } from '@/components/providers/socket-provider';
 import { apiFetch, errorMessage } from '@/lib/client-api';
-import { SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
+import { SERVER_DEAFENED_ATTRIBUTE, SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
 
 // webAudioMix routes remote audio through a GainNode, which is what lets the
 // per-user volume go above 100% (an <audio> element tops out at 1.0).
 const ROOM_OPTIONS: RoomOptions = { webAudioMix: true, adaptiveStream: true, dynacast: true };
 const SELF_PREFS_KEY = 'discord-clone:voice-self';
+const PTT_KEY = 'discord-clone:push-to-talk';
+const DEFAULT_PTT_KEY = 'KeyV';
 
 const DISCONNECT_MESSAGES: Partial<Record<DisconnectReason, string>> = {
   [DisconnectReason.DUPLICATE_IDENTITY]: 'Bu kanala başka bir sekmeden ya da cihazdan bağlandın.',
@@ -38,6 +40,13 @@ interface TokenResponse {
   token: string;
   url: string;
   serverMuted: boolean;
+  serverDeafened: boolean;
+}
+
+export interface PushToTalk {
+  enabled: boolean;
+  /** KeyboardEvent.code, e.g. "KeyV" or "Backquote". */
+  key: string;
 }
 
 interface VoiceContextValue {
@@ -49,6 +58,11 @@ interface VoiceContextValue {
   selfMuted: boolean;
   deafened: boolean;
   serverMuted: boolean;
+  serverDeafened: boolean;
+  pushToTalk: PushToTalk;
+  setPushToTalk: (ptt: PushToTalk) => void;
+  /** Push-to-talk key held right now. */
+  talking: boolean;
   join: (channel: VoiceChannelRef) => Promise<void>;
   leave: () => void;
   toggleMute: () => void;
@@ -63,6 +77,19 @@ export function useVoice() {
   if (!ctx) throw new Error('useVoice must be used inside <VoiceProvider>');
   return ctx;
 }
+
+function readPushToTalk(): PushToTalk {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PTT_KEY) ?? '{}');
+    return { enabled: raw.enabled === true, key: typeof raw.key === 'string' && raw.key ? raw.key : DEFAULT_PTT_KEY };
+  } catch {
+    return { enabled: false, key: DEFAULT_PTT_KEY };
+  }
+}
+
+/** Typing in a text field must never key the mic. */
+const isTypingTarget = (t: EventTarget | null) =>
+  t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 
 function readSelfPrefs() {
   try {
@@ -87,6 +114,9 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [selfMuted, setSelfMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
   const [serverMuted, setServerMuted] = useState(false);
+  const [serverDeafened, setServerDeafened] = useState(false);
+  const [pushToTalk, setPushToTalkState] = useState<PushToTalk>({ enabled: false, key: DEFAULT_PTT_KEY });
+  const [talking, setTalking] = useState(false);
   // Bumped by every join/leave so a slow token fetch can't resurrect a stale join.
   const attempt = useRef(0);
   const { socket } = useSocket();
@@ -119,7 +149,9 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       announce();
     };
     const onAttributes = (_changed: Record<string, string>, participant: Participant) => {
-      if (participant.isLocal) setServerMuted(participant.attributes[SERVER_MUTED_ATTRIBUTE] === '1');
+      if (!participant.isLocal) return;
+      setServerMuted(participant.attributes[SERVER_MUTED_ATTRIBUTE] === '1');
+      setServerDeafened(participant.attributes[SERVER_DEAFENED_ATTRIBUTE] === '1');
     };
     const onMediaError = (err: Error) => {
       const failure = MediaDeviceFailure.getFailure(err);
@@ -144,7 +176,37 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
   // Discord semantics: deafen implies mute; undeafen restores whatever mute
   // state you had. A server mute overrides both.
-  const micOn = !selfMuted && !deafened && !serverMuted;
+  useEffect(() => setPushToTalkState(readPushToTalk()), []);
+  const setPushToTalk = useCallback((ptt: PushToTalk) => {
+    setPushToTalkState(ptt);
+    try {
+      localStorage.setItem(PTT_KEY, JSON.stringify(ptt));
+    } catch {
+      // storage unavailable; the setting just won't persist
+    }
+  }, []);
+
+  // Push-to-talk: the mic is live only while the key is held in this tab.
+  // Browsers don't see keys pressed in other apps, so it releases on blur.
+  useEffect(() => {
+    if (!pushToTalk.enabled) return setTalking(false);
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== pushToTalk.key || e.repeat || isTypingTarget(e.target)) return;
+      setTalking(true);
+    };
+    const up = (e: KeyboardEvent) => e.code === pushToTalk.key && setTalking(false);
+    const release = () => setTalking(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', release);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', release);
+    };
+  }, [pushToTalk]);
+
+  const micOn = !selfMuted && !deafened && !serverMuted && (!pushToTalk.enabled || talking);
   useEffect(() => {
     if (status !== 'connected') return;
     room.localParticipant
@@ -168,6 +230,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         if (mine !== attempt.current) return;
         await room.disconnect(); // no-op when idle; leaves the previous channel otherwise
         setServerMuted(res.serverMuted);
+        setServerDeafened(res.serverDeafened);
         await room.connect(res.url, res.token);
         if (mine !== attempt.current) return;
         setStatus('connected');
@@ -219,6 +282,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       selfMuted,
       deafened,
       serverMuted,
+      serverDeafened,
+      pushToTalk,
+      setPushToTalk,
+      talking,
       join,
       leave,
       toggleMute: () => {
@@ -233,7 +300,21 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       toggleDeafen: () => setDeafened((d) => !d),
       setMediaError,
     }),
-    [channel, status, error, mediaError, selfMuted, deafened, serverMuted, join, leave],
+    [
+      channel,
+      status,
+      error,
+      mediaError,
+      selfMuted,
+      deafened,
+      serverMuted,
+      serverDeafened,
+      pushToTalk,
+      setPushToTalk,
+      talking,
+      join,
+      leave,
+    ],
   );
 
   return (
@@ -241,7 +322,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       <RoomContext.Provider value={room}>
         {children}
         {/* muted disables the remote tracks outright, which also works through Web Audio. */}
-        <RoomAudioRenderer muted={deafened} />
+        <RoomAudioRenderer muted={deafened || serverDeafened} />
       </RoomContext.Provider>
     </VoiceContext.Provider>
   );

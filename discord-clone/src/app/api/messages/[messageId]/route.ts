@@ -59,7 +59,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   const row = await db.message.update({
     where: { id: params.messageId },
-    data: { deleted: true, content: '', fileUrl: null },
+    data: { deleted: true, content: '', fileUrl: null, pinned: false },
     select: messageSelect,
   });
   await deleteUpload(found.message.fileUrl);

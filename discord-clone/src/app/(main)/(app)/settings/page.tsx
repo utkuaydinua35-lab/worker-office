@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { ProfileSettingsForm } from '@/components/user/profile-settings-form';
+import { VoiceNotificationSettings } from '@/components/user/voice-notification-settings';
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { publicProfileSelect, toPublicProfile } from '@/lib/profile';
@@ -31,6 +32,7 @@ export default async function SettingsPage() {
         </div>
       </div>
       <ProfileSettingsForm initialProfile={toPublicProfile(user)} />
+      <VoiceNotificationSettings />
     </main>
     </div>
   );

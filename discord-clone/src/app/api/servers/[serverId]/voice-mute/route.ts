@@ -61,7 +61,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ serverId: stri
         const room = voiceRoomName(id);
         try {
           const participant = await rooms.updateParticipant(room, userId, {
-            permission: voicePermission(muted),
+            permission: voicePermission(muted, target.serverDeafened),
             attributes: { [SERVER_MUTED_ATTRIBUTE]: muted ? '1' : '0' },
           });
           // Revoking the permission stops new publishing; also mute what's already live.

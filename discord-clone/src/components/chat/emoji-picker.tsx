@@ -19,49 +19,60 @@ function EmojiMartPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   useEffect(() => {
     let cancelled = false;
     const host = hostRef.current;
-    void Promise.all([
-      import('emoji-mart'),
-      import('@emoji-mart/data'),
-      import('@emoji-mart/data/i18n/tr.json'),
-    ]).then(([{ Picker }, { default: data }, { default: i18n }]) => {
-      if (cancelled || !host) return;
-      const picker = new Picker({
-        data,
-        // Passing i18n inline keeps emoji-mart from fetching it from a CDN.
-        i18n,
-        locale: 'tr',
-        theme: 'dark',
-        previewPosition: 'none',
-        onEmojiSelect: (emoji: { native: string }) => onSelectRef.current(emoji.native),
-      });
-      host.replaceChildren(picker as unknown as Node);
-      setLoading(false);
-    });
+    void Promise.all([import('emoji-mart'), import('@emoji-mart/data'), import('@emoji-mart/data/i18n/tr.json')]).then(
+      ([{ Picker }, { default: data }, { default: i18n }]) => {
+        if (cancelled || !host) return;
+        const picker = new Picker({
+          data,
+          // Passing i18n inline keeps emoji-mart from fetching it from a CDN.
+          i18n,
+          locale: 'tr',
+          theme: 'dark',
+          previewPosition: 'none',
+          onEmojiSelect: (emoji: { native: string }) => onSelectRef.current(emoji.native),
+        });
+        host.replaceChildren(picker as unknown as Node);
+        setLoading(false);
+      },
+    );
     return () => {
       cancelled = true;
       host?.replaceChildren();
     };
   }, []);
 
-  return (
-    <div ref={hostRef} className={loading ? 'h-[435px] w-[352px]' : undefined} aria-busy={loading} />
-  );
+  return <div ref={hostRef} className={loading ? 'h-[435px] w-[352px]' : undefined} aria-busy={loading} />;
 }
 
-export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+interface EmojiPickerProps {
+  onSelect: (emoji: string) => void;
+  /** Defaults to the chat input's smiley button. */
+  trigger?: React.ReactNode;
+  side?: 'top' | 'bottom' | 'left' | 'right';
+  /** Reactions pick one emoji; the chat input keeps the picker open for more. */
+  closeOnSelect?: boolean;
+}
+
+export function EmojiPicker({ onSelect, trigger, side = 'top', closeOnSelect = false }: EmojiPickerProps) {
+  const [open, setOpen] = useState(false);
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          title="Emoji"
-          className="text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Smile className="h-6 w-6" />
-        </button>
+        {trigger ?? (
+          <button type="button" title="Emoji" className="text-muted-foreground transition-colors hover:text-foreground">
+            <Smile className="h-6 w-6" />
+          </button>
+        )}
       </PopoverTrigger>
-      <PopoverContent side="top" align="end" sideOffset={16} className="border-none bg-transparent shadow-none">
-        <EmojiMartPicker onSelect={onSelect} />
+      <PopoverContent side={side} align="end" sideOffset={16} className="border-none bg-transparent shadow-none">
+        {open && (
+          <EmojiMartPicker
+            onSelect={(emoji) => {
+              onSelect(emoji);
+              if (closeOnSelect) setOpen(false);
+            }}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );

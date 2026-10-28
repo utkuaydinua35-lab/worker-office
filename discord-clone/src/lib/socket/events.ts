@@ -24,6 +24,26 @@ export interface PresencePayload {
   status: UserStatusValue; // already effective: OFFLINE when disconnected or invisible
 }
 
+export interface ChannelActivityPayload {
+  serverId: string;
+  channelId: string;
+  channelName: string;
+  messageId: string;
+  authorId: string;
+  authorName: string;
+  preview: string;
+  /** User ids the message mentions. */
+  mentions: string[];
+}
+
+export interface ConversationActivityPayload {
+  conversationId: string;
+  /** Absent for activity that isn't a new message. */
+  authorId?: string;
+  authorName?: string;
+  preview?: string;
+}
+
 export interface ServerToClientEvents {
   'message:new': (message: MessageDTO) => void;
   /** Edits and (soft) deletes — the DTO carries `deleted`. */
@@ -34,7 +54,9 @@ export interface ServerToClientEvents {
   /** A user connected, disconnected or changed status. */
   presence: (payload: PresencePayload) => void;
   /** A DM arrived in a conversation (sent to both participants' user rooms). */
-  'conversation:activity': (payload: { conversationId: string }) => void;
+  'conversation:activity': (payload: ConversationActivityPayload) => void;
+  /** A message was posted in one of your servers' text channels. */
+  'channel:activity': (payload: ChannelActivityPayload) => void;
   /** The music bot's player for a server changed; `state` null = bot left. */
   'music:state': (payload: { serverId: string; state: MusicState | null }) => void;
   /** Who's in the server's voice channels (from LiveKit). */

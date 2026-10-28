@@ -11,6 +11,7 @@ import {
   roomName,
   serverRoom,
   userRoom,
+  type ChannelActivityPayload,
   type ClientToServerEvents,
   type ServerToClientEvents,
   type SocketData,
@@ -95,8 +96,12 @@ export function emitMessage(kind: ChatKind, event: 'message:new' | 'message:upda
 }
 
 /** Lets both participants' DM lists pick up a conversation that just got a message. */
-export function emitConversationActivity(conversationId: string, userIds: string[]) {
-  getIO()?.to(userIds.map(userRoom)).emit('conversation:activity', { conversationId });
+export function emitConversationActivity(
+  conversationId: string,
+  userIds: string[],
+  from?: { authorId: string; authorName: string; preview: string },
+) {
+  getIO()?.to(userIds.map(userRoom)).emit('conversation:activity', { conversationId, ...from });
 }
 
 // ─── Music ──────────────────────────────────────────────────────────────
@@ -107,6 +112,17 @@ export function emitMusicState(serverId: string, state: MusicState | null) {
 
 export function emitVoiceState(serverId: string, channels: VoiceChannelsState) {
   getIO()?.to(serverRoom(serverId)).emit('voice:state', { serverId, channels });
+}
+
+/**
+ * A new channel message, for unread markers and mention notifications. Goes to
+ * every member's own room, so servers that aren't open in a tab hear it too.
+ */
+export async function emitChannelActivity(serverId: string, payload: ChannelActivityPayload) {
+  const io = getIO();
+  if (!io) return;
+  const members = await db.member.findMany({ where: { serverId }, select: { userId: true } });
+  io.to(members.map((m) => userRoom(m.userId))).emit('channel:activity', payload);
 }
 
 /** Tells every tab of `userId` to switch voice channels. */

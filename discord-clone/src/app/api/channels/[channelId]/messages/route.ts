@@ -4,9 +4,9 @@ import { invalid, jsonError, notFound, readJson, unauthorized } from '@/lib/api'
 import { getCurrentUserId } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getChannelAccess } from '@/lib/membership';
-import { messageSelect, MESSAGES_PAGE_SIZE, toMessageDTO, type MessagePage } from '@/lib/messages';
+import { mentionedUsernames, messageSelect, MESSAGES_PAGE_SIZE, toMessageDTO, type MessagePage } from '@/lib/messages';
 import { getMusicService, looksLikeCommand } from '@/lib/music/bridge';
-import { emitMessage } from '@/lib/socket/emit';
+import { emitChannelActivity, emitMessage } from '@/lib/socket/emit';
 import { isOwnUploadUrl } from '@/lib/storage';
 import { createMessageSchema } from '@/lib/validators';
 
@@ -49,15 +49,56 @@ export async function POST(req: Request, ctx: Ctx) {
   const parsed = createMessageSchema.safeParse(await readJson(req));
   if (!parsed.success) return invalid(parsed.error);
 
-  const { content, fileUrl } = parsed.data;
+  const { content, fileUrl, replyToId } = parsed.data;
   if (fileUrl && !isOwnUploadUrl(fileUrl, 'attachments')) return jsonError(400, 'Geçersiz dosya');
+  if (replyToId) {
+    const target = await db.message.findUnique({ where: { id: replyToId }, select: { channelId: true } });
+    if (target?.channelId !== params.channelId) return jsonError(400, 'Yanıtlanan mesaj bulunamadı');
+  }
+
+  // @name → the server's members by that name (case-insensitive), never yourself.
+  const names = mentionedUsernames(content);
+  const mentioned = names.length
+    ? await db.member.findMany({
+        where: {
+          serverId: access.channel.serverId,
+          userId: { not: userId },
+          user: { OR: names.map((n) => ({ username: { equals: n, mode: 'insensitive' as const } })) },
+        },
+        select: { userId: true },
+      })
+    : [];
+  // A reply pings the author it answers, as Discord does by default.
+  const replyAuthor = replyToId
+    ? (await db.message.findUnique({ where: { id: replyToId }, select: { userId: true } }))?.userId
+    : undefined;
+  const mentions = [
+    ...new Set([...mentioned.map((m) => m.userId), ...(replyAuthor && replyAuthor !== userId ? [replyAuthor] : [])]),
+  ];
 
   const row = await db.message.create({
-    data: { content, fileUrl: fileUrl ?? null, userId, channelId: params.channelId },
+    data: {
+      content,
+      fileUrl: fileUrl ?? null,
+      userId,
+      channelId: params.channelId,
+      replyToId: replyToId ?? null,
+      mentions,
+    },
     select: messageSelect,
   });
   const message = toMessageDTO(row);
   emitMessage('channel', 'message:new', message);
+  void emitChannelActivity(access.channel.serverId, {
+    serverId: access.channel.serverId,
+    channelId: access.channel.id,
+    channelName: access.channel.name,
+    messageId: message.id,
+    authorId: userId,
+    authorName: row.user.username,
+    preview: content.slice(0, 120),
+    mentions,
+  });
 
   // Bot commands ("!play ...") stay ordinary messages; the bot replies on its own time.
   if (looksLikeCommand(content)) {

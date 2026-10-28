@@ -11,6 +11,7 @@ export interface VoiceMember {
   isBot: boolean;
   micMuted: boolean;
   serverMuted: boolean;
+  serverDeafened: boolean;
   /** From the token's attributes; only decides which menu items to show. */
   role: MemberRole;
   isOwner: boolean;

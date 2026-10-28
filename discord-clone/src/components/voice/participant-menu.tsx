@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, MicOff, PhoneOff } from 'lucide-react';
+import { HeadphoneOff, Loader2, MicOff, PhoneOff } from 'lucide-react';
 import { useState } from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -16,6 +16,8 @@ interface ParticipantMenuProps {
   onPrefsChange: (patch: Partial<LocalAudioPrefs>) => void;
   /** Present only when the current user may server-mute this participant. */
   serverMute: { serverId: string; userId: string; muted: boolean } | null;
+  /** Present when the current user may server-deafen this participant. */
+  serverDeafen: { serverId: string; userId: string; deafened: boolean } | null;
   /** Present when the current user may disconnect this participant (or stop the bot). */
   disconnect: { serverId: string; userId: string; label: string } | null;
   children: React.ReactNode;
@@ -29,6 +31,7 @@ export function ParticipantMenu({
   prefs,
   onPrefsChange,
   serverMute,
+  serverDeafen,
   disconnect,
   children,
 }: ParticipantMenuProps) {
@@ -45,6 +48,23 @@ export function ParticipantMenu({
         body: JSON.stringify({ userId: serverMute.userId, muted: !serverMute.muted }),
       });
       // The icon updates from the participant attribute LiveKit pushes back.
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleServerDeafen() {
+    if (!serverDeafen) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await voiceControl(serverDeafen.serverId, {
+        action: 'deafen',
+        userId: serverDeafen.userId,
+        deafened: !serverDeafen.deafened,
+      });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -110,6 +130,17 @@ export function ParticipantMenu({
           >
             {serverMute.muted ? 'Sunucu susturmasını kaldır' : 'Sunucuda sustur'}
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MicOff className="h-4 w-4" />}
+          </button>
+        )}
+        {serverDeafen && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void toggleServerDeafen()}
+            className="flex w-full items-center justify-between rounded px-1 py-1 text-destructive hover:bg-secondary disabled:opacity-50"
+          >
+            {serverDeafen.deafened ? 'Sağırlaştırmayı kaldır' : 'Sunucuda sağırlaştır'}
+            <HeadphoneOff className="h-4 w-4" />
           </button>
         )}
         {disconnect && (
