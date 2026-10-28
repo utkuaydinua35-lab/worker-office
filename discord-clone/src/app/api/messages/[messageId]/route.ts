@@ -11,7 +11,7 @@ import { updateMessageSchema } from '@/lib/validators';
 
 export const runtime = 'nodejs';
 
-type Ctx = { params: { messageId: string } };
+type Ctx = { params: Promise<{ messageId: string }> };
 
 // The message plus the caller's access to its channel. Someone who has left
 // the server can no longer edit or delete what they wrote there.
@@ -23,7 +23,8 @@ async function loadMessage(userId: string, messageId: string) {
 }
 
 /** JSON { content }. Author only. */
-export async function PATCH(req: Request, { params }: Ctx) {
+export async function PATCH(req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 
@@ -46,7 +47,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 /** Soft delete: the row stays so the chat shows "message deleted". Author, ADMIN or MODERATOR. */
-export async function DELETE(_req: Request, { params }: Ctx) {
+export async function DELETE(_req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

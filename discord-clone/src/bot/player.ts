@@ -10,7 +10,7 @@ import {
   TrackSource,
 } from '@livekit/rtc-node';
 
-import { CHANNELS, resolveMedia, SAMPLE_RATE, spawnPcm, type ResolvedMedia } from '@/bot/media';
+import { CHANNELS, SAMPLE_RATE, spawnPcm, type ResolvedMedia } from '@/bot/media';
 import type { MusicState, MusicTrack } from '@/lib/music/types';
 
 const FRAME_MS = 10;
@@ -18,8 +18,6 @@ const SAMPLES_PER_FRAME = (SAMPLE_RATE / 1000) * FRAME_MS;
 const FRAME_BYTES = SAMPLES_PER_FRAME * CHANNELS * 2; // s16le
 // Small output buffer so pause and skip take effect almost immediately.
 const SOURCE_QUEUE_MS = 200;
-// googlevideo URLs expire after ~6 h; re-resolve anything older than this before playing.
-const STREAM_URL_MAX_AGE_MS = 60 * 60 * 1000;
 
 export interface QueuedTrack {
   track: MusicTrack;
@@ -167,31 +165,24 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
   }
 
   private async play(item: QueuedTrack) {
-    if (Date.now() - item.media.resolvedAt > STREAM_URL_MAX_AGE_MS) {
-      item.media = await resolveMedia(item.media.pageUrl);
-    }
-
-    const ffmpeg = spawnPcm(item.media);
+    const pcm = spawnPcm(item.media.pageUrl);
     let aborted = false;
-    let stderr = '';
-    ffmpeg.stderr.on('data', (d) => (stderr += d));
-    const exited = new Promise<number | null>((resolve) => ffmpeg.on('close', resolve));
     this.abortCurrent = () => {
       aborted = true;
       this.source.clearQueue();
-      ffmpeg.kill('SIGKILL');
+      pcm.kill();
       // Wake a paused loop so it notices the abort.
       this.resumeWaiter?.();
     };
 
     try {
       let pending = Buffer.alloc(0);
-      for await (const chunk of ffmpeg.stdout as AsyncIterable<Buffer>) {
+      for await (const chunk of pcm.stdout as AsyncIterable<Buffer>) {
         pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
         let offset = 0;
         while (pending.length - offset >= FRAME_BYTES) {
           while (this.paused && !aborted) {
-            // Not reading stdout while paused lets backpressure stall ffmpeg.
+            // Not reading stdout while paused lets backpressure stall ffmpeg and yt-dlp.
             await new Promise<void>((resolve) => (this.resumeWaiter = resolve));
           }
           if (aborted) return;
@@ -206,14 +197,12 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
         pending = pending.subarray(offset);
         if (aborted) return;
       }
-      const code = await exited;
-      if (!aborted && code !== 0) {
-        throw new Error(stderr.trim().split('\n').pop() || `ffmpeg çıkış kodu ${code}`);
-      }
+      const error = await pcm.finished;
+      if (!aborted && error) throw new Error(error);
       if (!aborted) await this.source.waitForPlayout();
     } finally {
       this.abortCurrent = null;
-      if (ffmpeg.exitCode === null) ffmpeg.kill('SIGKILL');
+      pcm.kill(); // no-op once both have exited
     }
   }
 }

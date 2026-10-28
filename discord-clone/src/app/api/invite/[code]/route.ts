@@ -6,7 +6,8 @@ import { db } from '@/lib/db';
 import { emitServerUpdated } from '@/lib/socket/emit';
 
 /** Joins the server behind an invite code. Idempotent for existing members. */
-export async function POST(_req: Request, { params }: { params: { code: string } }) {
+export async function POST(_req: Request, ctx: { params: Promise<{ code: string }> }) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

@@ -6,7 +6,8 @@ import { db } from '@/lib/db';
 
 // Joining is a POST behind a button: a GET that changed membership could be
 // triggered by any <img src="/invite/..."> on another site.
-export default async function InvitePage({ params }: { params: { code: string } }) {
+export default async function InvitePage(props: { params: Promise<{ code: string }> }) {
+  const params = await props.params;
   const userId = await getCurrentUserId();
   if (!userId) redirect(`/login?callbackUrl=${encodeURIComponent(`/invite/${params.code}`)}`);
 

@@ -7,7 +7,8 @@ import { getCurrentUserId } from '@/lib/auth';
 import { getConversationAccess } from '@/lib/conversation';
 import { db } from '@/lib/db';
 
-export default async function ConversationPage({ params }: { params: { conversationId: string } }) {
+export default async function ConversationPage(props: { params: Promise<{ conversationId: string }> }) {
+  const params = await props.params;
   const userId = await getCurrentUserId();
   if (!userId) redirect('/login');
 

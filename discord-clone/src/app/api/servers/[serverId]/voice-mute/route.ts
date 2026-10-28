@@ -21,7 +21,8 @@ const bodySchema = z.object({ userId: z.string().uuid(), muted: z.boolean() });
  * JSON { userId, muted }. Server-mutes (or unmutes) a member across all of
  * the server's voice channels. MODERATOR or ADMIN, and only members they outrank.
  */
-export async function POST(req: Request, { params }: { params: { serverId: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ serverId: string }> }) {
+  const params = await ctx.params;
   const actorId = await getCurrentUserId();
   if (!actorId) return unauthorized();
 

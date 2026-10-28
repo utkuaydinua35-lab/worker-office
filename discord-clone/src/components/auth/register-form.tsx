@@ -13,9 +13,9 @@ import { registerSchema, type RegisterInput } from '@/lib/validators';
 
 type Errors = Partial<Record<keyof RegisterInput | 'form', string>>;
 
-export function RegisterForm() {
+export function RegisterForm({ requiresCode }: { requiresCode: boolean }) {
   const router = useRouter();
-  const [values, setValues] = useState<RegisterInput>({ username: '', email: '', password: '' });
+  const [values, setValues] = useState<RegisterInput>({ username: '', email: '', password: '', registrationCode: '' });
   const [errors, setErrors] = useState<Errors>({});
   const [loading, setLoading] = useState(false);
 
@@ -57,7 +57,6 @@ export function RegisterForm() {
         return;
       }
       router.push('/');
-      router.refresh();
     } catch {
       setErrors({ form: 'Bağlantı hatası' });
     } finally {
@@ -88,6 +87,19 @@ export function RegisterForm() {
         />
         {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
       </div>
+      {requiresCode && (
+        <div className="space-y-2">
+          <Label htmlFor="registrationCode">Kayıt Kodu</Label>
+          <Input
+            id="registrationCode"
+            autoComplete="off"
+            value={values.registrationCode}
+            onChange={set('registrationCode')}
+            placeholder="Sunucu sahibinden al"
+          />
+          {errors.registrationCode && <p className="text-xs text-destructive">{errors.registrationCode}</p>}
+        </div>
+      )}
       {errors.form && <p className="text-sm text-destructive">{errors.form}</p>}
       <Button type="submit" className="w-full" disabled={loading}>
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}

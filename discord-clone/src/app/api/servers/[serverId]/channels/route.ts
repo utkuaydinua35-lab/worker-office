@@ -8,7 +8,8 @@ import { emitServerUpdated } from '@/lib/socket/emit';
 import { createChannelSchema } from '@/lib/validators';
 
 /** JSON { name, type: TEXT | VOICE }. ADMIN or MODERATOR. */
-export async function POST(req: Request, { params }: { params: { serverId: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ serverId: string }> }) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

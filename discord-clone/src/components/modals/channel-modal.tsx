@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useNavigateFresh } from '@/hooks/use-navigate-fresh';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 import { cn } from '@/lib/utils';
 import type { ChannelTypeValue } from '@/lib/validators';
@@ -37,6 +38,7 @@ export function ChannelModal(props: Props) {
   const editing = props.mode === 'edit' ? props.channel : null;
   const defaultType = props.mode === 'create' ? (props.defaultType ?? 'TEXT') : undefined;
   const router = useRouter();
+  const navigateFresh = useNavigateFresh();
 
   const [name, setName] = useState('');
   const [type, setType] = useState<ChannelTypeValue>('TEXT');
@@ -68,8 +70,7 @@ export function ChannelModal(props: Props) {
           body: JSON.stringify({ name, type }),
         });
         onOpenChange(false);
-        router.push(`/servers/${serverId}/channels/${channel.id}`);
-        router.refresh();
+        navigateFresh(`/servers/${serverId}/channels/${channel.id}`);
       }
     } catch (err) {
       setError(errorMessage(err));

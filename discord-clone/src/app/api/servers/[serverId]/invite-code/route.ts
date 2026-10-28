@@ -7,7 +7,8 @@ import { generateInviteCode } from '@/lib/invite';
 import { canManageServer, getMembership } from '@/lib/membership';
 
 /** Replaces the invite code; the old link stops working. ADMIN only. */
-export async function POST(_req: Request, { params }: { params: { serverId: string } }) {
+export async function POST(_req: Request, ctx: { params: Promise<{ serverId: string }> }) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

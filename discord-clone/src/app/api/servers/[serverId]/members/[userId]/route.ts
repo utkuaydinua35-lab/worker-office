@@ -10,7 +10,7 @@ import { emitServerUpdated, revokeUserServerAccess } from '@/lib/socket/emit';
 
 export const runtime = 'nodejs';
 
-type Ctx = { params: { serverId: string; userId: string } };
+type Ctx = { params: Promise<{ serverId: string; userId: string }> };
 
 const roleSchema = z.object({ role: z.enum(['ADMIN', 'MODERATOR', 'GUEST']) });
 
@@ -35,7 +35,8 @@ async function loadPair(serverId: string, actorId: string, targetId: string) {
 }
 
 /** JSON { role }. ADMIN or owner, over members they outrank, and only to roles below their own. */
-export async function PATCH(req: Request, { params }: Ctx) {
+export async function PATCH(req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const actorId = await getCurrentUserId();
   if (!actorId) return unauthorized();
 
@@ -56,7 +57,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 /** Kick. MODERATOR or above, over members they outrank. */
-export async function DELETE(_req: Request, { params }: Ctx) {
+export async function DELETE(_req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const actorId = await getCurrentUserId();
   if (!actorId) return unauthorized();
 

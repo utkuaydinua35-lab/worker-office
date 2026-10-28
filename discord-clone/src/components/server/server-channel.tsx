@@ -7,6 +7,7 @@ import { useState } from 'react';
 
 import { ChannelModal } from '@/components/modals/channel-modal';
 import { ConfirmModal } from '@/components/modals/confirm-modal';
+import { useNavigateFresh } from '@/hooks/use-navigate-fresh';
 import { apiFetch } from '@/lib/client-api';
 import { cn } from '@/lib/utils';
 import type { ChannelTypeValue } from '@/lib/validators';
@@ -20,6 +21,7 @@ interface ServerChannelProps {
 export function ServerChannel({ serverId, channel, canManage }: ServerChannelProps) {
   const params = useParams<{ channelId?: string }>();
   const router = useRouter();
+  const navigateFresh = useNavigateFresh();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const active = params.channelId === channel.id;
@@ -73,8 +75,8 @@ export function ServerChannel({ serverId, channel, canManage }: ServerChannelPro
             confirmLabel="Kanalı Sil"
             onConfirm={async () => {
               await apiFetch(`/api/channels/${channel.id}`, { method: 'DELETE' });
-              if (active) router.push(`/servers/${serverId}`);
-              router.refresh();
+              if (active) navigateFresh(`/servers/${serverId}`);
+              else router.refresh();
             }}
           />
         </>

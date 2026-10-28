@@ -11,6 +11,7 @@ import {
 } from 'livekit-client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useSocket } from '@/components/providers/socket-provider';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 import { SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
 
@@ -87,6 +88,11 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [serverMuted, setServerMuted] = useState(false);
   // Bumped by every join/leave so a slow token fetch can't resurrect a stale join.
   const attempt = useRef(0);
+  const { socket } = useSocket();
+  const socketRef = useRef(socket);
+  socketRef.current = socket;
+  // The sidebar's voice lists come from LiveKit; nudge the server to re-read it.
+  const announce = useCallback(() => socketRef.current?.emit('voice:changed'), []);
 
   useEffect(() => {
     const prefs = readSelfPrefs();
@@ -109,6 +115,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       setError(DISCONNECT_MESSAGES[reason] ?? 'Ses bağlantısı koptu.');
       setChannel(null);
       setStatus('idle');
+      announce();
     };
     const onAttributes = (_changed: Record<string, string>, participant: Participant) => {
       if (participant.isLocal) setServerMuted(participant.attributes[SERVER_MUTED_ATTRIBUTE] === '1');
@@ -132,18 +139,21 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         .off(RoomEvent.MediaDevicesError, onMediaError);
       void room.disconnect();
     };
-  }, [room]);
+  }, [room, announce]);
 
   // Discord semantics: deafen implies mute; undeafen restores whatever mute
   // state you had. A server mute overrides both.
   const micOn = !selfMuted && !deafened && !serverMuted;
   useEffect(() => {
     if (status !== 'connected') return;
-    room.localParticipant.setMicrophoneEnabled(micOn).catch((err) => {
-      setMediaError(errorMessage(err));
-      setSelfMuted(true);
-    });
-  }, [room, status, micOn]);
+    room.localParticipant
+      .setMicrophoneEnabled(micOn)
+      .catch((err) => {
+        setMediaError(errorMessage(err));
+        setSelfMuted(true);
+      })
+      .finally(announce);
+  }, [room, status, micOn, announce]);
 
   const join = useCallback(
     async (target: VoiceChannelRef) => {
@@ -174,11 +184,11 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
   const leave = useCallback(() => {
     attempt.current++;
-    void room.disconnect();
+    void room.disconnect().finally(announce);
     setChannel(null);
     setStatus('idle');
     setError(null);
-  }, [room]);
+  }, [room, announce]);
 
   const value = useMemo<VoiceContextValue>(
     () => ({

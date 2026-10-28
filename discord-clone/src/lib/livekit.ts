@@ -1,16 +1,19 @@
 import { RoomServiceClient, TrackSource, type VideoGrant } from 'livekit-server-sdk';
 
 /**
- * LiveKit settings. NEXT_PUBLIC_LIVEKIT_URL is the WebSocket URL the browser
- * connects to (wss://<project>.livekit.cloud, or ws://localhost:7880 for
- * `livekit-server --dev`); the server API lives on the same host over HTTP.
+ * LiveKit settings. NEXT_PUBLIC_LIVEKIT_URL is the WebSocket URL browsers
+ * connect to (wss://hasbihal.example.com behind the reverse proxy, or
+ * ws://localhost:7880 for `livekit-server --dev`). LIVEKIT_INTERNAL_URL, when
+ * set, is how this server itself (room API, music bot) reaches LiveKit
+ * without going out through the proxy, e.g. ws://127.0.0.1:7880.
  */
 export function livekitConfig() {
   const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
   if (!wsUrl || !apiKey || !apiSecret) return null;
-  return { wsUrl, apiKey, apiSecret, httpUrl: wsUrl.replace(/^ws/, 'http') };
+  const internalWsUrl = process.env.LIVEKIT_INTERNAL_URL || wsUrl;
+  return { wsUrl, internalWsUrl, apiKey, apiSecret, httpUrl: internalWsUrl.replace(/^ws/, 'http') };
 }
 
 export function roomService() {

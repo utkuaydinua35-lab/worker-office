@@ -7,6 +7,7 @@ import { isChatKind } from '@/lib/chat-target';
 import { isConversationParticipant } from '@/lib/conversation';
 import { getChannelAccess, getMembership } from '@/lib/membership';
 import { broadcastPresence, setIO, trackSocket, type TypedIO } from '@/lib/socket/emit';
+import { pokeVoicePresence } from '@/services/voice-presence';
 import {
   roomName,
   SOCKET_PATH,
@@ -107,6 +108,8 @@ export function attachSocketServer(httpServer: HttpServer): TypedIO {
     socket.on('room:leave', (kind, id) => {
       if (isRoomKind(kind) && typeof id === 'string') void socket.leave(roomName(kind, id));
     });
+
+    socket.on('voice:changed', () => pokeVoicePresence());
 
     socket.on('typing', (payload) => {
       const { kind, roomId } = payload ?? {};

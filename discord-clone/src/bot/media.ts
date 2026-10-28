@@ -1,11 +1,11 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import type { Readable } from 'node:stream';
 
 /**
- * yt-dlp resolves a YouTube link or search to a direct audio URL; ffmpeg
- * decodes that to raw PCM for LiveKit. Both are external programs
- * (`brew install yt-dlp ffmpeg`); YTDLP_PATH / FFMPEG_PATH override the
- * binaries.
+ * yt-dlp finds the track and downloads its audio; ffmpeg decodes that to raw
+ * PCM for LiveKit. Both are external programs (`brew install yt-dlp ffmpeg`;
+ * yt-dlp also wants a JS runtime such as deno for YouTube); YTDLP_PATH /
+ * FFMPEG_PATH override the binaries.
  */
 
 export const SAMPLE_RATE = 48_000;
@@ -19,13 +19,10 @@ const YOUTUBE_HOSTS = ['youtube.com', 'youtu.be', 'music.youtube.com', 'm.youtub
 export interface ResolvedMedia {
   id: string;
   title: string;
+  /** What playback hands back to yt-dlp (the watch URL for YouTube). */
   pageUrl: string;
   durationSec: number | null;
   thumbnail: string | null;
-  /** Direct media URL; googlevideo links expire after a few hours. */
-  streamUrl: string;
-  httpHeaders: Record<string, string>;
-  resolvedAt: number;
 }
 
 function run(cmd: string, args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string }> {
@@ -95,18 +92,21 @@ export function toYtDlpTarget(query: string): { target: string } | { error: stri
   return ok ? { target: query } : { error: 'Yalnızca YouTube bağlantıları ya da arama destekleniyor.' };
 }
 
-/** Looks the track up and picks its best audio format. */
+const ytDlpError = (stderr: string) =>
+  stderr
+    .split('\n')
+    .find((l) => l.startsWith('ERROR:'))
+    ?.replace(/^ERROR:\s*/, '');
+
+/** Looks the track up (title, length, thumbnail). Nothing is downloaded yet. */
 export async function resolveMedia(target: string): Promise<ResolvedMedia> {
   const { code, stdout, stderr } = await run(
     YTDLP,
     // `--` ends option parsing, so a query starting with "-" can't become a flag.
-    ['-f', 'bestaudio/best', '--no-playlist', '--dump-single-json', '--no-warnings', '--', target],
+    ['--no-playlist', '--dump-single-json', '--no-warnings', '--', target],
     RESOLVE_TIMEOUT_MS,
   );
-  if (code !== 0) {
-    const reason = stderr.split('\n').find((l) => l.startsWith('ERROR:')) ?? 'yt-dlp başarısız oldu';
-    throw new Error(reason.replace(/^ERROR:\s*/, ''));
-  }
+  if (code !== 0) throw new Error(ytDlpError(stderr) ?? 'yt-dlp başarısız oldu');
 
   let info = JSON.parse(stdout) as Record<string, unknown>;
   // Searches come back as a one-entry playlist.
@@ -114,45 +114,69 @@ export async function resolveMedia(target: string): Promise<ResolvedMedia> {
     if (info.entries.length === 0) throw new Error('Sonuç bulunamadı');
     info = info.entries[0] as Record<string, unknown>;
   }
-  const streamUrl = typeof info.url === 'string' ? info.url : null;
-  if (!streamUrl) throw new Error('Çalınabilir ses bulunamadı');
+  const pageUrl = String(info.webpage_url ?? info.original_url ?? '');
+  if (!pageUrl) throw new Error('Çalınabilir ses bulunamadı');
 
   return {
-    id: String(info.id ?? streamUrl),
+    id: String(info.id ?? pageUrl),
     title: String(info.title ?? 'Bilinmeyen parça'),
-    pageUrl: String(info.webpage_url ?? info.original_url ?? target),
+    pageUrl,
     durationSec: typeof info.duration === 'number' ? info.duration : null,
     thumbnail: typeof info.thumbnail === 'string' ? info.thumbnail : null,
-    streamUrl,
-    httpHeaders: (info.http_headers as Record<string, string> | undefined) ?? {},
-    resolvedAt: Date.now(),
   };
 }
 
-export type PcmProcess = ChildProcessByStdio<null, Readable, Readable>;
+export interface PcmPipeline {
+  /** s16le, 48 kHz, stereo. */
+  stdout: Readable;
+  kill(): void;
+  /** Resolves with null on a clean finish, or the most useful error line. */
+  finished: Promise<string | null>;
+}
 
-/** ffmpeg decoding the stream to s16le 48 kHz stereo on stdout. */
-export function spawnPcm(media: ResolvedMedia): PcmProcess {
-  const headers = Object.entries(media.httpHeaders)
-    .map(([k, v]) => `${k}: ${v}\r\n`)
-    .join('');
-  return spawn(
-    FFMPEG,
-    [
-      '-hide_banner',
-      '-loglevel', 'error',
-      // Long tracks and pauses outlive single HTTP connections; let ffmpeg resume.
-      '-reconnect', '1',
-      '-reconnect_streamed', '1',
-      '-reconnect_delay_max', '5',
-      ...(headers ? ['-headers', headers] : []),
-      '-i', media.streamUrl,
-      '-vn',
-      '-f', 's16le',
-      '-ac', String(CHANNELS),
-      '-ar', String(SAMPLE_RATE),
-      'pipe:1',
-    ],
+const exitCode = (child: ChildProcess) =>
+  new Promise<number | null>((resolve) => {
+    if (child.exitCode !== null) resolve(child.exitCode);
+    else child.once('close', resolve);
+  });
+
+/**
+ * yt-dlp → ffmpeg → PCM. yt-dlp does the download itself: YouTube answers
+ * 403 when anything else fetches the media URL it resolved (the request has
+ * to come in yt-dlp's own chunked, signed form).
+ */
+export function spawnPcm(pageUrl: string): PcmPipeline {
+  const ytdlp = spawn(
+    YTDLP,
+    ['-f', 'bestaudio/best', '--no-playlist', '--quiet', '--no-warnings', '-o', '-', '--', pageUrl],
     { stdio: ['ignore', 'pipe', 'pipe'] },
   );
+  const ffmpeg = spawn(
+    FFMPEG,
+    ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-vn', '-f', 's16le', '-ac', String(CHANNELS), '-ar', String(SAMPLE_RATE), 'pipe:1'],
+    { stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  ytdlp.stdout.pipe(ffmpeg.stdin);
+  // Killing one end mid-stream breaks the pipe; that's expected on skip/stop.
+  ffmpeg.stdin.on('error', () => {});
+  ytdlp.stdout.on('error', () => {});
+
+  let ytErr = '';
+  let ffErr = '';
+  ytdlp.stderr.on('data', (d) => (ytErr += d));
+  ffmpeg.stderr.on('data', (d) => (ffErr += d));
+
+  const finished = Promise.all([exitCode(ytdlp), exitCode(ffmpeg)]).then(([y, f]) => {
+    if (y === 0 && f === 0) return null;
+    return ytDlpError(ytErr) ?? (ffErr.trim().split('\n').pop() || `yt-dlp ${y}, ffmpeg ${f}`);
+  });
+
+  return {
+    stdout: ffmpeg.stdout,
+    kill: () => {
+      ytdlp.kill('SIGKILL');
+      ffmpeg.kill('SIGKILL');
+    },
+    finished,
+  };
 }

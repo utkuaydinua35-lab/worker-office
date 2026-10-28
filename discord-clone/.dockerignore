@@ -1,0 +1,11 @@
+# Never ship secrets, local data or build leftovers into the image.
+.env
+.env.*
+!.env.example
+uploads
+node_modules
+.next
+deploy
+prisma/migrations
+*.log
+.git

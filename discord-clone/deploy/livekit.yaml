@@ -1,0 +1,14 @@
+# API keys come from LIVEKIT_KEYS (docker-compose.yml), not this file.
+port: 7880
+# Signaling/API only on loopback; Caddy forwards /rtc to it over TLS.
+bind_addresses:
+  - 127.0.0.1
+rtc:
+  # Media must be reachable directly: open these in the firewall.
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Discover and announce the server's public IP via STUN.
+  use_external_ip: true
+logging:
+  level: info

@@ -4,13 +4,12 @@ import { ServerSidebar } from '@/components/server/server-sidebar';
 import { getCurrentUserId } from '@/lib/auth';
 import { getMembership } from '@/lib/membership';
 
-export default async function ServerLayout({
-  children,
-  params,
-}: {
+export default async function ServerLayout(props: {
   children: React.ReactNode;
-  params: { serverId: string };
+  params: Promise<{ serverId: string }>;
 }) {
+  const { children } = props;
+  const params = await props.params;
   const userId = await getCurrentUserId();
   if (!userId) redirect('/login');
 

@@ -8,10 +8,11 @@ import { getMembership } from '@/lib/membership';
 import { getMusicService } from '@/lib/music/bridge';
 import { MUSIC_ACTIONS } from '@/lib/music/types';
 
-type Ctx = { params: { serverId: string } };
+type Ctx = { params: Promise<{ serverId: string }> };
 
 /** The music bot's current state for this server (null when it isn't playing anywhere). */
-export async function GET(_req: Request, { params }: Ctx) {
+export async function GET(_req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
   if (!(await getMembership(userId, params.serverId))) return notFound('Sunucu');
@@ -21,7 +22,8 @@ export async function GET(_req: Request, { params }: Ctx) {
 const actionSchema = z.object({ action: z.enum(MUSIC_ACTIONS) });
 
 /** JSON { action: pause | resume | skip | stop } — the now-playing panel's buttons. */
-export async function POST(req: Request, { params }: Ctx) {
+export async function POST(req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

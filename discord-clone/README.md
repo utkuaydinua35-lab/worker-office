@@ -2,7 +2,7 @@
 
 Pixel Agents'tan bağımsız bir proje; kök `package.json` workspace'lerine dahil değildir.
 
-**Yığın:** Next.js 14 (App Router) · TypeScript · Prisma 5 · PostgreSQL · NextAuth v4 (Credentials + JWT) · Socket.io 4 · LiveKit (SFU, `@livekit/rtc-node` bot) · yt-dlp + ffmpeg · Tailwind CSS · Shadcn UI (Radix) · emoji-mart
+**Yığın:** Next.js 15 (App Router, React 19) · TypeScript · Prisma 5 · PostgreSQL · NextAuth v4 (Credentials + JWT) · Socket.io 4 · LiveKit (SFU, `@livekit/rtc-node` bot) · yt-dlp + ffmpeg · Tailwind CSS · Shadcn UI (Radix) · emoji-mart
 
 | Aşama | Kapsam                                                                | Durum |
 | ----- | --------------------------------------------------------------------- | ----- |
@@ -24,7 +24,9 @@ npm run dev
 
 `.env` içinde `DATABASE_URL` ve `NEXTAUTH_SECRET` doldurulmalı (`openssl rand -base64 32`). Ardından http://localhost:3000 adresini açın.
 
-Ses kanalları için bir LiveKit sunucusu gerekir (yoksa metin tarafı yine çalışır, ses kanalında uyarı görünür):
+**Yayına almak için:** [DEPLOY.md](DEPLOY.md) (Docker Compose + Caddy ile HTTPS, kendi alan adınızda).
+
+Ses kanalları için bir LiveKit sunucusu (**1.13 veya üstü**) gerekir (yoksa metin tarafı yine çalışır, ses kanalında uyarı görünür):
 
 - **Yerel:** `brew install livekit` → `livekit-server --dev`. `.env.example`'daki varsayılanlar (`ws://localhost:7880`, `devkey` / `secret`) bununla eşleşir.
 - **LiveKit Cloud:** https://cloud.livekit.io'da proje açın; proje URL'sini `NEXT_PUBLIC_LIVEKIT_URL`'e, API anahtar çiftini `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`'a yazın.
@@ -75,6 +77,8 @@ src/components/voice/
 - **Üye listesi:** çevrimiçiler role göre (Yöneticiler, Moderatörler, Çevrimiçi), sonra çevrimdışılar. Tıklayınca profil kartı (avatar, durum, hakkımda, üyelik tarihleri, rol, Mesaj Gönder).
 - **Sağ tık menüsü:** Profil, Mesaj Gönder, kullanıcı ses seviyesi (%0–200) ve yerel susturma (ses odasındaki kart menüsüyle senkron), yetkiye göre Sunucuda Sustur, Rol ve Sunucudan At.
 - **DM:** yalnızca ortak bir sunucuda olduğun kişilere (arkadaş listesi yok). Kanal sohbetiyle aynı bileşenler: canlı mesaj, yazıyor, düzenle/sil, ek, emoji.
+- **Ses kanalındakiler:** kanal listesinde her ses kanalının altında kimlerin (botu da) olduğu, mikrofon/susturma durumlarıyla görünür. Bilgi LiveKit sunucu API'sinden okunur (`src/services/voice-presence.ts`; 4 saniyede bir ve biri katılınca/ayrılınca hemen). Aynı kanaldaysan konuşanların halkası da yanar.
+- **Kayıt kodu:** `REGISTRATION_CODE` tanımlıysa kayıt yalnızca bu kodu bilenlere açıktır.
 
 ## Müzik botu (Aşama 5)
 
@@ -89,6 +93,8 @@ src/bot/                     Yalnızca server.ts yükler; Next paketine girmez (
   commands.ts                !komut ayrıştırıcı
 src/lib/music/bridge.ts      Route Handler'lar ↔ bot (globalThis; yalnızca tipler)
 ```
+
+**Ses hattı:** yt-dlp indirir, çıktısı doğrudan ffmpeg'e akar (`yt-dlp -o - | ffmpeg`). YouTube, yt-dlp'nin çözdüğü medya adresini başka bir programın açmasına 403 ile cevap veriyor; indirmeyi yt-dlp'ye bırakmak bunu önler. YouTube için yt-dlp bir JS çalışma ortamı da ister (Homebrew `deno`'yu kendisi kurar).
 
 **Akış:** metin kanalına `!play ...` yazılır → mesaj normal şekilde kaydedilir → mesaj API'si komutu bota iletir → bot, komutu yazanın o an bulunduğu ses kanalını LiveKit'ten öğrenir, oraya `Müzik Botu` olarak katılır ve çalar. Cevaplar bot kullanıcısından normal mesaj olarak gelir (BOT rozetiyle). Çalan şarkı ve sıra `music:state` olayıyla sunucudaki herkese yayınlanır; kanal listesinin altındaki panel ilerleme çubuğu, duraklat/geç/durdur butonları ve sırayı gösterir.
 

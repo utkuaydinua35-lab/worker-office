@@ -21,7 +21,6 @@ export function JoinInviteButton({ code }: { code: string }) {
         { method: 'POST' },
       );
       router.push(`/servers/${serverId}`);
-      router.refresh();
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);

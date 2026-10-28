@@ -34,7 +34,6 @@ export function LoginForm() {
       return;
     }
     router.push(safeCallback(params.get('callbackUrl')));
-    router.refresh();
   }
 
   return (

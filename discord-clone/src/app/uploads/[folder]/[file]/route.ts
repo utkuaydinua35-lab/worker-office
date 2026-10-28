@@ -14,7 +14,8 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 // Serves files saved by lib/storage.ts in local-disk mode.
-export async function GET(_req: Request, { params }: { params: { folder: string; file: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ folder: string; file: string }> }) {
+  const params = await ctx.params;
   const match = LOCAL_FILENAME.exec(params.file);
   if (!isUploadFolder(params.folder) || !match) return new Response('Not found', { status: 404 });
 

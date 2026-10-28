@@ -11,10 +11,11 @@ import { updateChannelSchema } from '@/lib/validators';
 
 export const runtime = 'nodejs';
 
-type Ctx = { params: { channelId: string } };
+type Ctx = { params: Promise<{ channelId: string }> };
 
 /** JSON { name }. ADMIN or MODERATOR. */
-export async function PATCH(req: Request, { params }: Ctx) {
+export async function PATCH(req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 
@@ -31,7 +32,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 /** ADMIN or MODERATOR. Cascades to the channel's messages. */
-export async function DELETE(_req: Request, { params }: Ctx) {
+export async function DELETE(_req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

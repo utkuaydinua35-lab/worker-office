@@ -8,11 +8,10 @@ import { VoiceChannelView } from '@/components/voice/voice-channel-view';
 import { getCurrentUserId } from '@/lib/auth';
 import { getChannelAccess } from '@/lib/membership';
 
-export default async function ChannelPage({
-  params,
-}: {
-  params: { serverId: string; channelId: string };
+export default async function ChannelPage(props: {
+  params: Promise<{ serverId: string; channelId: string }>;
 }) {
+  const params = await props.params;
   const userId = await getCurrentUserId();
   if (!userId) redirect('/login');
 

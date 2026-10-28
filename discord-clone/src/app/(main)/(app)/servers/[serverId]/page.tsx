@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db';
 
 /** Opens the server's first text channel. Membership is checked by the layout. */
-export default async function ServerPage({ params }: { params: { serverId: string } }) {
+export default async function ServerPage(props: { params: Promise<{ serverId: string }> }) {
+  const params = await props.params;
   const channel = await db.channel.findFirst({
     where: { serverId: params.serverId, type: 'TEXT' },
     orderBy: { createdAt: 'asc' },

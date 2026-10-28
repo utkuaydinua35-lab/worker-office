@@ -1,13 +1,13 @@
 import type { MemberRole } from '@prisma/client';
 
 import { NowPlayingPanel } from '@/components/music/now-playing-panel';
-import { ServerChannel } from '@/components/server/server-channel';
+import { ServerChannelList } from '@/components/server/server-channel-list';
 import { ServerHeader } from '@/components/server/server-header';
 import { ServerRealtime } from '@/components/server/server-realtime';
-import { ServerSection } from '@/components/server/server-section';
 import { UserPanel } from '@/components/server/user-panel';
 import { db } from '@/lib/db';
 import { canManageChannels } from '@/lib/membership';
+import { getServerVoiceState } from '@/lib/voice-presence/store';
 
 interface ServerSidebarProps {
   serverId: string;
@@ -26,10 +26,6 @@ export async function ServerSidebar({ serverId, userId, role }: ServerSidebarPro
     select: { username: true, avatarUrl: true, status: true, customStatus: true },
   });
 
-  const textChannels = server.channels.filter((c) => c.type === 'TEXT');
-  const voiceChannels = server.channels.filter((c) => c.type === 'VOICE');
-  const manage = canManageChannels(role);
-
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col bg-[#2b2d31]">
       <ServerRealtime serverId={server.id} />
@@ -39,31 +35,12 @@ export async function ServerSidebar({ serverId, userId, role }: ServerSidebarPro
         isOwner={server.ownerId === userId}
       />
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
-        {[
-          { type: 'TEXT' as const, label: 'Metin Kanalları', channels: textChannels },
-          { type: 'VOICE' as const, label: 'Ses Kanalları', channels: voiceChannels },
-        ].map((section) => (
-          <div key={section.type}>
-            <ServerSection
-              label={section.label}
-              serverId={server.id}
-              channelType={section.type}
-              canCreate={manage}
-            />
-            <div className="space-y-0.5">
-              {section.channels.map((channel) => (
-                <ServerChannel
-                  key={channel.id}
-                  serverId={server.id}
-                  channel={{ id: channel.id, name: channel.name, type: channel.type }}
-                  canManage={manage}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      <ServerChannelList
+        serverId={server.id}
+        channels={server.channels.map((c) => ({ id: c.id, name: c.name, type: c.type }))}
+        canManage={canManageChannels(role)}
+        initialVoice={getServerVoiceState(server.id)}
+      />
 
       <NowPlayingPanel serverId={server.id} />
       <UserPanel user={user} />

@@ -46,7 +46,7 @@ export function ChatInput({ target, placeholder, onSent, typingUsers }: ChatInpu
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const lastTypingSent = useRef(0);
-  const idleTimer = useRef<ReturnType<typeof setTimeout>>();
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   function stopTyping() {
     clearTimeout(idleTimer.current);

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useNavigateFresh } from '@/hooks/use-navigate-fresh';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 import { IMAGE_MIME_TYPES } from '@/lib/validators';
 
@@ -31,6 +32,7 @@ export function ServerFormModal(props: Props) {
   const { open, onOpenChange } = props;
   const editing = props.mode === 'edit' ? props.server : null;
   const router = useRouter();
+  const navigateFresh = useNavigateFresh();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState('');
@@ -77,8 +79,7 @@ export function ServerFormModal(props: Props) {
           body: form,
         });
         onOpenChange(false);
-        router.push(`/servers/${created.id}/channels/${created.firstChannelId}`);
-        router.refresh();
+        navigateFresh(`/servers/${created.id}/channels/${created.firstChannelId}`);
       }
     } catch (err) {
       setError(errorMessage(err));

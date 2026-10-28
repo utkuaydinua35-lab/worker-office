@@ -1,7 +1,6 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -15,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useNavigateFresh } from '@/hooks/use-navigate-fresh';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 
 // Accepts a bare code or a full invite link (".../invite/<code>").
@@ -30,7 +30,7 @@ export function JoinServerModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const router = useRouter();
+  const navigateFresh = useNavigateFresh();
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -54,8 +54,7 @@ export function JoinServerModal({
         { method: 'POST' },
       );
       onOpenChange(false);
-      router.push(`/servers/${serverId}`);
-      router.refresh();
+      navigateFresh(`/servers/${serverId}`);
     } catch (err) {
       setError(errorMessage(err));
     } finally {

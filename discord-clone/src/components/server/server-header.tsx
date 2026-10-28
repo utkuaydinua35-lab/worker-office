@@ -2,7 +2,6 @@
 
 import type { MemberRole } from '@prisma/client';
 import { ChevronDown, LogOut, PlusCircle, Settings, Trash, UserPlus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ChannelModal } from '@/components/modals/channel-modal';
@@ -16,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useNavigateFresh } from '@/hooks/use-navigate-fresh';
 import { apiFetch } from '@/lib/client-api';
 
 type ModalKind = 'invite' | 'settings' | 'channel' | 'delete' | 'leave' | null;
@@ -27,7 +27,7 @@ interface ServerHeaderProps {
 }
 
 export function ServerHeader({ server, role, isOwner }: ServerHeaderProps) {
-  const router = useRouter();
+  const navigateFresh = useNavigateFresh();
   const [modal, setModal] = useState<ModalKind>(null);
   const isAdmin = role === 'ADMIN';
   const canManageChannels = role === 'ADMIN' || role === 'MODERATOR';
@@ -87,8 +87,7 @@ export function ServerHeader({ server, role, isOwner }: ServerHeaderProps) {
         confirmLabel="Sunucuyu Sil"
         onConfirm={async () => {
           await apiFetch(`/api/servers/${server.id}`, { method: 'DELETE' });
-          router.push('/');
-          router.refresh();
+          navigateFresh('/');
         }}
       />
       <ConfirmModal
@@ -103,8 +102,7 @@ export function ServerHeader({ server, role, isOwner }: ServerHeaderProps) {
         confirmLabel="Ayrıl"
         onConfirm={async () => {
           await apiFetch(`/api/servers/${server.id}/leave`, { method: 'POST' });
-          router.push('/');
-          router.refresh();
+          navigateFresh('/');
         }}
       />
     </>

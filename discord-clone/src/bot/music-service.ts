@@ -12,6 +12,7 @@ import { formatDuration, type MusicAction, type MusicState, type MusicTrack } fr
 import { canManageChannels } from '@/lib/roles';
 import { emitMessage, emitMusicState } from '@/lib/socket/emit';
 import { BOT_ATTRIBUTE } from '@/lib/voice-attributes';
+import { pokeVoicePresence } from '@/services/voice-presence';
 
 export const BOT_IDENTITY = 'music-bot';
 const MAX_QUEUE = 50;
@@ -193,7 +194,7 @@ export class DiscordCloneMusicService implements MusicService {
     });
 
     const player = new MusicPlayer(serverId, voiceChannel, textChannelId);
-    await player.connect(cfg.wsUrl, await token.toJwt());
+    await player.connect(cfg.internalWsUrl, await token.toJwt());
     this.players.set(serverId, player);
 
     player.on('change', () => emitMusicState(serverId, player.getState()));
@@ -213,6 +214,7 @@ export class DiscordCloneMusicService implements MusicService {
     this.audienceWatchers.set(serverId, setInterval(() => void this.checkAudience(serverId), AUDIENCE_POLL_MS));
 
     emitMusicState(serverId, player.getState());
+    pokeVoicePresence();
     return player;
   }
 
@@ -265,6 +267,7 @@ export class DiscordCloneMusicService implements MusicService {
     this.players.delete(serverId);
     await player.close();
     emitMusicState(serverId, null);
+    pokeVoicePresence();
   }
 
   // ─── LiveKit lookups ───────────────────────────────────────────────────

@@ -14,10 +14,11 @@ import { emitConversationActivity, emitMessage } from '@/lib/socket/emit';
 import { isOwnUploadUrl } from '@/lib/storage';
 import { createMessageSchema } from '@/lib/validators';
 
-type Ctx = { params: { conversationId: string } };
+type Ctx = { params: Promise<{ conversationId: string }> };
 
 /** Newest first, MESSAGES_PAGE_SIZE per page. `?cursor=<messageId>` continues with older ones. */
-export async function GET(req: Request, { params }: Ctx) {
+export async function GET(req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
   if (!(await getConversationAccess(userId, params.conversationId))) return notFound('Konuşma');
@@ -39,7 +40,8 @@ export async function GET(req: Request, { params }: Ctx) {
 }
 
 /** JSON { content, fileUrl? } — fileUrl must come from POST /api/uploads. */
-export async function POST(req: Request, { params }: Ctx) {
+export async function POST(req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 
 import { db } from '@/lib/db';
+import { registrationCodeMatches } from '@/lib/registration';
 import { registerSchema } from '@/lib/validators';
 
 const BCRYPT_ROUNDS = 12;
@@ -17,7 +18,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const { username, email, password } = parsed.data;
+  const { username, email, password, registrationCode } = parsed.data;
+  if (!registrationCodeMatches(registrationCode)) {
+    return NextResponse.json(
+      { error: 'Kayıt kodu hatalı', field: 'registrationCode' },
+      { status: 403 },
+    );
+  }
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
   try {

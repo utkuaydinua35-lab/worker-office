@@ -12,10 +12,11 @@ import { serverNameSchema } from '@/lib/validators';
 
 export const runtime = 'nodejs';
 
-type Ctx = { params: { serverId: string } };
+type Ctx = { params: Promise<{ serverId: string }> };
 
 /** multipart/form-data: name?, icon?, removeIcon? ("1"). ADMIN only. */
-export async function PATCH(req: Request, { params }: Ctx) {
+export async function PATCH(req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 
@@ -51,7 +52,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
 }
 
 /** Owner only. Cascades to members, channels and messages. */
-export async function DELETE(_req: Request, { params }: Ctx) {
+export async function DELETE(_req: Request, ctx: Ctx) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

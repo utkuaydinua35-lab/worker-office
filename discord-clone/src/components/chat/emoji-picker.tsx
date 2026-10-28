@@ -1,26 +1,52 @@
 'use client';
 
 import { Smile } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import { useEffect, useRef, useState } from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-// emoji-mart's data is ~400 KB; load it only when the picker first opens.
-const Picker = dynamic(
-  async () => {
-    const [{ default: EmojiMart }, { default: data }, { default: i18n }] = await Promise.all([
-      import('@emoji-mart/react'),
+/**
+ * emoji-mart's framework-free picker (a web component), mounted into a div.
+ * The React wrapper package stopped at React 18. Its data is ~400 KB, so it
+ * loads on first open, not with the page.
+ */
+function EmojiMartPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const host = hostRef.current;
+    void Promise.all([
+      import('emoji-mart'),
       import('@emoji-mart/data'),
       import('@emoji-mart/data/i18n/tr.json'),
-    ]);
-    function TurkishPicker(props: { onEmojiSelect: (emoji: { native: string }) => void }) {
-      // Passing i18n inline keeps emoji-mart from fetching it from a CDN.
-      return <EmojiMart data={data} i18n={i18n} locale="tr" theme="dark" previewPosition="none" {...props} />;
-    }
-    return TurkishPicker;
-  },
-  { ssr: false, loading: () => <div className="h-[435px] w-[352px]" /> },
-);
+    ]).then(([{ Picker }, { default: data }, { default: i18n }]) => {
+      if (cancelled || !host) return;
+      const picker = new Picker({
+        data,
+        // Passing i18n inline keeps emoji-mart from fetching it from a CDN.
+        i18n,
+        locale: 'tr',
+        theme: 'dark',
+        previewPosition: 'none',
+        onEmojiSelect: (emoji: { native: string }) => onSelectRef.current(emoji.native),
+      });
+      host.replaceChildren(picker as unknown as Node);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+      host?.replaceChildren();
+    };
+  }, []);
+
+  return (
+    <div ref={hostRef} className={loading ? 'h-[435px] w-[352px]' : undefined} aria-busy={loading} />
+  );
+}
 
 export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   return (
@@ -35,7 +61,7 @@ export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void })
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="end" sideOffset={16} className="border-none bg-transparent shadow-none">
-        <Picker onEmojiSelect={(emoji) => onSelect(emoji.native)} />
+        <EmojiMartPicker onSelect={onSelect} />
       </PopoverContent>
     </Popover>
   );

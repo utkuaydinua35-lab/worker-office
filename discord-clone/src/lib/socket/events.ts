@@ -4,6 +4,7 @@ import type { ChatKind } from '@/lib/chat-target';
 import type { MessageDTO } from '@/lib/messages';
 import type { MusicState } from '@/lib/music/types';
 import type { UserStatusValue } from '@/lib/validators';
+import type { VoiceChannelsState } from '@/lib/voice-presence/store';
 
 export const SOCKET_PATH = '/api/socket';
 
@@ -36,12 +37,16 @@ export interface ServerToClientEvents {
   'conversation:activity': (payload: { conversationId: string }) => void;
   /** The music bot's player for a server changed; `state` null = bot left. */
   'music:state': (payload: { serverId: string; state: MusicState | null }) => void;
+  /** Who's in the server's voice channels (from LiveKit). */
+  'voice:state': (payload: { serverId: string; channels: VoiceChannelsState }) => void;
 }
 
 export interface ClientToServerEvents {
   'room:join': (kind: RoomKind, id: string, ack: (ok: boolean) => void) => void;
   'room:leave': (kind: RoomKind, id: string) => void;
   typing: (payload: { kind: ChatKind; roomId: string; typing: boolean }) => void;
+  /** "I joined, left or toggled my mic" — only a hint to re-read LiveKit sooner. */
+  'voice:changed': () => void;
 }
 
 export interface SocketData {

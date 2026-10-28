@@ -12,11 +12,14 @@ loadEnvConfig(process.cwd(), dev);
 
 const port = Number(process.env.PORT ?? 3000);
 const hostname = 'localhost';
+// Behind a reverse proxy set BIND_HOST=127.0.0.1 so the app port is never reachable from outside.
+const bindHost = process.env.BIND_HOST || undefined;
 
 async function main() {
   // Imported after loadEnvConfig: Prisma reads DATABASE_URL on first use.
   const { attachSocketServer } = await import('./src/lib/socket/server');
   const { startMusicBot } = await import('./src/bot');
+  const { startVoicePresence } = await import('./src/services/voice-presence');
 
   const app = next({ dev, hostname, port });
   const handle = app.getRequestHandler();
@@ -26,9 +29,10 @@ async function main() {
   attachSocketServer(httpServer);
   // After the socket server: the bot announces its state through it.
   await startMusicBot();
+  startVoicePresence();
 
-  httpServer.listen(port, () => {
-    console.log(`> Hazır: http://${hostname}:${port} (${dev ? 'development' : 'production'})`);
+  httpServer.listen(port, bindHost, () => {
+    console.log(`> Hazır: http://${bindHost ?? hostname}:${port} (${dev ? 'development' : 'production'})`);
   });
 }
 

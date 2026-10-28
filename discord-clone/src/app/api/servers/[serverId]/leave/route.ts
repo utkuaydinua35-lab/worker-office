@@ -7,7 +7,8 @@ import { removeFromVoiceRooms } from '@/lib/livekit';
 import { getMembership } from '@/lib/membership';
 import { emitServerUpdated, revokeUserServerAccess } from '@/lib/socket/emit';
 
-export async function POST(_req: Request, { params }: { params: { serverId: string } }) {
+export async function POST(_req: Request, ctx: { params: Promise<{ serverId: string }> }) {
+  const params = await ctx.params;
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 

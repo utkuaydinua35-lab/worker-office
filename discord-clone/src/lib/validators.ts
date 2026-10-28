@@ -17,6 +17,8 @@ export const registerSchema = z.object({
     .string()
     .min(8, 'Şifre en az 8 karakter olmalı')
     .max(72, 'Şifre en fazla 72 karakter olabilir'), // bcrypt ignores bytes past 72
+  // Checked against REGISTRATION_CODE when that's set (see lib/registration.ts).
+  registrationCode: z.string().max(200).optional(),
 });
 
 export const loginSchema = z.object({

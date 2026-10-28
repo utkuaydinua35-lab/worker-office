@@ -4,6 +4,7 @@ import type { ChatKind } from '@/lib/chat-target';
 import { db } from '@/lib/db';
 import type { MessageDTO } from '@/lib/messages';
 import type { MusicState } from '@/lib/music/types';
+import type { VoiceChannelsState } from '@/lib/voice-presence/store';
 import { effectiveStatus } from '@/lib/presence';
 import {
   channelRoom,
@@ -102,6 +103,10 @@ export function emitConversationActivity(conversationId: string, userIds: string
 
 export function emitMusicState(serverId: string, state: MusicState | null) {
   getIO()?.to(serverRoom(serverId)).emit('music:state', { serverId, state });
+}
+
+export function emitVoiceState(serverId: string, channels: VoiceChannelsState) {
+  getIO()?.to(serverRoom(serverId)).emit('voice:state', { serverId, channels });
 }
 
 // ─── Servers ────────────────────────────────────────────────────────────
