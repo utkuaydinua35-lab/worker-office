@@ -1,7 +1,7 @@
 import { TrackSource, type ParticipantInfo } from 'livekit-server-sdk';
 
 import { db } from '@/lib/db';
-import { roomService } from '@/lib/livekit';
+import { livekitConfig, roomService } from '@/lib/livekit';
 import { emitVoiceState } from '@/lib/socket/emit';
 import { BOT_ATTRIBUTE, SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
 import {
@@ -38,6 +38,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let pokeTimer: ReturnType<typeof setTimeout> | null = null;
 let running = false;
 let again = false;
+// Log an outage once, not every POLL_MS, and say when it's over.
+let unreachable = false;
 
 async function poll() {
   const rooms = roomService();
@@ -82,8 +84,18 @@ async function poll() {
       else store.delete(serverId);
       emitVoiceState(serverId, after);
     }
+    if (unreachable) {
+      unreachable = false;
+      console.info('[voice-presence] LiveKit bağlantısı geri geldi');
+    }
   } catch (err) {
-    console.warn('[voice-presence] poll failed', (err as Error).message);
+    if (!unreachable) {
+      unreachable = true;
+      console.warn(
+        `[voice-presence] LiveKit'e ulaşılamıyor (${livekitConfig()?.httpUrl}): ${(err as Error).message}. ` +
+          'livekit-server çalışıyor mu? Ses kanalı listeleri o gelene kadar güncellenmeyecek.',
+      );
+    }
   } finally {
     running = false;
     if (again) {
