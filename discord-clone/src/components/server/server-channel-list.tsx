@@ -27,7 +27,7 @@ const SECTIONS = [
 
 /** Text and voice sections; voice channels list who's in them, live. */
 export function ServerChannelList({ serverId, channels, canManage, initialVoice, viewer }: ServerChannelListProps) {
-  const voice = useVoicePresence(serverId, initialVoice);
+  const voice = useVoicePresence(serverId, initialVoice, viewer);
   const voiceChannels = channels.filter((c) => c.type === 'VOICE');
 
   return (

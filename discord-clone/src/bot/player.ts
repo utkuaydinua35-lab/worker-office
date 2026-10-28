@@ -182,8 +182,9 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
     }
   }
 
-  private async play(item: QueuedTrack) {
-    const pcm = spawnPcm(item.media.pageUrl, item.startMs);
+  private async play(item: QueuedTrack): Promise<void> {
+    const pcm = await spawnPcm(item.media, item.startMs);
+    const startedAt = this.elapsedMs;
     let aborted = false;
     this.abortCurrent = () => {
       aborted = true;
@@ -216,6 +217,14 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
         if (aborted) return;
       }
       const error = await pcm.finished;
+      if (!aborted && error && item.media.info && this.elapsedMs === startedAt) {
+        // The saved lookup didn't work (expired or changed URLs): look it up again.
+        console.warn('[music] saved info failed, retrying with a fresh lookup:', error);
+        item.media.info = undefined;
+        this.abortCurrent = null;
+        pcm.kill();
+        return this.play(item);
+      }
       if (!aborted && error) throw new Error(error);
       if (!aborted) await this.source.waitForPlayout();
     } finally {

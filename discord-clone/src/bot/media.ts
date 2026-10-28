@@ -1,4 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { unlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { Readable } from 'node:stream';
 
 /**
@@ -23,9 +27,22 @@ export interface ResolvedMedia {
   pageUrl: string;
   durationSec: number | null;
   thumbnail: string | null;
+  /**
+   * yt-dlp's full info from the lookup, so playback can skip a second
+   * extraction (the slow, CPU-heavy part). Its media URLs expire after a few
+   * hours, so it's only used while fresh. Absent for playlist entries.
+   */
+  info?: { json: string; at: number };
 }
 
-function run(cmd: string, args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string }> {
+/** Reuse a lookup's info this long; YouTube's signed URLs last ~6 h. */
+const INFO_MAX_AGE_MS = 60 * 60 * 1000;
+
+function run(
+  cmd: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
@@ -182,6 +199,7 @@ export async function resolveMedia(target: string): Promise<ResolvedMedia> {
     pageUrl,
     durationSec: typeof info.duration === 'number' ? info.duration : null,
     thumbnail: typeof info.thumbnail === 'string' ? info.thumbnail : null,
+    info: { json: JSON.stringify(info), at: Date.now() },
   };
 }
 
@@ -204,12 +222,25 @@ const exitCode = (child: ChildProcess) =>
  * 403 when anything else fetches the media URL it resolved (the request has
  * to come in yt-dlp's own chunked, signed form).
  */
-export function spawnPcm(pageUrl: string, startMs = 0): PcmPipeline {
+export async function spawnPcm(media: ResolvedMedia, startMs = 0): Promise<PcmPipeline> {
+  // A fresh lookup's info lets yt-dlp go straight to downloading.
+  let infoFile: string | null = null;
+  if (media.info && Date.now() - media.info.at < INFO_MAX_AGE_MS) {
+    infoFile = path.join(tmpdir(), `hasbihal-${randomUUID()}.info.json`);
+    await writeFile(infoFile, media.info.json).catch(() => (infoFile = null));
+  }
+  const source = infoFile ? ['--load-info-json', infoFile] : ['--', media.pageUrl];
   const ytdlp = spawn(
     YTDLP,
-    ['-f', 'bestaudio/best', '--no-playlist', '--quiet', '--no-warnings', '-o', '-', '--', pageUrl],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
+    ['-f', 'bestaudio/best', '--no-playlist', '--quiet', '--no-warnings', '-o', '-', ...source],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
   );
+  if (infoFile) {
+    const file = infoFile;
+    ytdlp.once('close', () => void unlink(file).catch(() => {}));
+  }
   const ffmpeg = spawn(
     FFMPEG,
     [

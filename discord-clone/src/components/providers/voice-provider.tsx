@@ -234,6 +234,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         await room.connect(res.url, res.token);
         if (mine !== attempt.current) return;
         setStatus('connected');
+        announce(); // the mic may take a while (permission prompt); don't wait for it
       } catch (err) {
         if (mine !== attempt.current) return;
         setError(errorMessage(err));
@@ -241,7 +242,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         setStatus('idle');
       }
     },
-    [room],
+    [room, announce],
   );
 
   // A moderator moved us (Discord's "Move To"): rejoin there, and follow with

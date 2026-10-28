@@ -125,6 +125,17 @@ export async function emitChannelActivity(serverId: string, payload: ChannelActi
   io.to(members.map((m) => userRoom(m.userId))).emit('channel:activity', payload);
 }
 
+/** "Müzik Botu yazıyor..." while the bot looks a track up. */
+export function emitBotTyping(channelId: string, user: { id: string; username: string }, typing: boolean) {
+  getIO()?.to(channelRoom(channelId)).emit('typing', {
+    kind: 'channel',
+    roomId: channelId,
+    userId: user.id,
+    username: user.username,
+    typing,
+  });
+}
+
 /** Tells every tab of `userId` to switch voice channels. */
 export function emitVoiceMove(userId: string, payload: { serverId: string; channelId: string; channelName: string }) {
   getIO()?.to(userRoom(userId)).emit('voice:move', payload);

@@ -1,9 +1,9 @@
 'use client';
 
-import { useSpeakingParticipants } from '@livekit/components-react';
+import { useRoomContext, useSpeakingParticipants } from '@livekit/components-react';
 import type { MemberRole } from '@prisma/client';
 import { HeadphoneOff, MicOff, Music } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useSocket } from '@/components/providers/socket-provider';
 import { useVoice } from '@/components/providers/voice-provider';
@@ -23,8 +23,58 @@ import { cn } from '@/lib/utils';
 import { voiceControl } from '@/lib/voice-control';
 import type { VoiceChannelsState, VoiceMember } from '@/lib/voice-presence/store';
 
-/** The server's live voice-channel occupancy: server-rendered first, then pushed. */
-export function useVoicePresence(serverId: string, initial: VoiceChannelsState) {
+function avatarFromMetadata(metadata: string | undefined) {
+  try {
+    const value = JSON.parse(metadata ?? '{}').avatarUrl;
+    return typeof value === 'string' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The server's live voice-channel occupancy: server-rendered first, then
+ * pushed. Your own seat comes from the local connection, so joining shows up
+ * at once instead of after LiveKit's next listing (as in Discord).
+ */
+export function useVoicePresence(serverId: string, initial: VoiceChannelsState, viewer: VoiceViewer) {
+  const listed = useListedVoicePresence(serverId, initial);
+  const voice = useVoice();
+  const room = useRoomContext();
+  const here = voice.status === 'connected' && voice.channel?.serverId === serverId ? voice.channel.id : null;
+  const micMuted =
+    voice.selfMuted || voice.deafened || voice.serverMuted || (voice.pushToTalk.enabled && !voice.talking);
+  const name = room.localParticipant.name;
+  const metadata = room.localParticipant.metadata;
+
+  return useMemo(() => {
+    if (!here) return listed;
+    const me: VoiceMember = {
+      id: viewer.id,
+      name: name || 'Sen',
+      avatarUrl: avatarFromMetadata(metadata),
+      isBot: false,
+      micMuted,
+      serverMuted: voice.serverMuted,
+      serverDeafened: voice.serverDeafened,
+      role: viewer.role,
+      isOwner: viewer.isOwner,
+    };
+    const next: VoiceChannelsState = {};
+    for (const [channelId, members] of Object.entries(listed)) {
+      // LiveKit's listing lags a move: we're only where our connection is.
+      const others = members.filter((m) => m.id !== viewer.id);
+      if (others.length) next[channelId] = others;
+    }
+    const mine = listed[here]?.find((m) => m.id === viewer.id) ?? me;
+    next[here] = [...(next[here] ?? []), { ...mine, micMuted, serverMuted: voice.serverMuted }].sort(
+      (a, b) => Number(a.isBot) - Number(b.isBot) || a.name.localeCompare(b.name, 'tr'),
+    );
+    return next;
+  }, [listed, here, viewer, name, metadata, micMuted, voice.serverMuted, voice.serverDeafened]);
+}
+
+function useListedVoicePresence(serverId: string, initial: VoiceChannelsState) {
   const { socket } = useSocket();
   const [channels, setChannels] = useState(initial);
   useEffect(() => setChannels(initial), [initial]);

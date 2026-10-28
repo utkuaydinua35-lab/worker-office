@@ -10,7 +10,7 @@ import { messageSelect, toMessageDTO } from '@/lib/messages';
 import type { MusicCaller, MusicService } from '@/lib/music/bridge';
 import { formatDuration, type MusicAction, type MusicState, type MusicTrack } from '@/lib/music/types';
 import { canManageChannels } from '@/lib/roles';
-import { emitMessage, emitMusicState } from '@/lib/socket/emit';
+import { emitBotTyping, emitMessage, emitMusicState } from '@/lib/socket/emit';
 import { BOT_ATTRIBUTE, BOT_IDENTITY } from '@/lib/voice-attributes';
 import { pokeVoicePresence } from '@/services/voice-presence';
 
@@ -135,6 +135,14 @@ export class DiscordCloneMusicService implements MusicService {
     const room = MAX_QUEUE - (player?.size ?? 0);
     if (room <= 0) return reply(`❌ Sıra dolu (en fazla ${MAX_QUEUE} şarkı).`);
 
+    // Joining the voice channel takes a second or two; do it while yt-dlp looks the track up.
+    const connecting = player
+      ? null
+      : this.createPlayer(ctx.serverId, voiceChannel, ctx.textChannelId).catch((err: Error) => err);
+    const typing = { id: this.botUserId, username: BOT_USERNAME };
+    emitBotTyping(ctx.textChannelId, typing, true);
+    const typingRefresh = setInterval(() => emitBotTyping(ctx.textChannelId, typing, true), 4000);
+
     let items: ResolvedMedia[];
     let playlist: { title: string; total: number; skipped: number } | null = null;
     try {
@@ -149,17 +157,23 @@ export class DiscordCloneMusicService implements MusicService {
         items = [await resolveMedia(target.target)];
       }
     } catch (err) {
+      // Nothing to play: leave again if we joined just for this.
+      void connecting?.then((p) => p instanceof MusicPlayer && p.isIdle && this.scheduleLeave(ctx.serverId, 'idle'));
       return reply(`❌ Bulunamadı: ${(err as Error).message}`);
+    } finally {
+      clearInterval(typingRefresh);
+      emitBotTyping(ctx.textChannelId, typing, false);
     }
 
-    if (!player) {
-      try {
-        player = await this.createPlayer(ctx.serverId, voiceChannel, ctx.textChannelId);
-      } catch (err) {
-        console.error('[music] connect failed', err);
+    if (connecting) {
+      const joined = await connecting;
+      if (joined instanceof Error) {
+        console.error('[music] connect failed', joined);
         return reply('❌ Ses kanalına bağlanamadım.');
       }
+      player = joined;
     }
+    if (!player) return reply('❌ Ses kanalına bağlanamadım.');
     player.textChannelId = ctx.textChannelId;
     this.cancelLeave(ctx.serverId);
 

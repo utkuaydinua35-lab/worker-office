@@ -21,6 +21,7 @@ import {
 // joined" proves nothing. Poll it, and poll sooner when someone pokes.
 const POLL_MS = 4000;
 const POKE_DEBOUNCE_MS = 300;
+const POKE_FOLLOW_UP_MS = 1500;
 const ROLES: readonly MemberRole[] = ['ADMIN', 'MODERATOR', 'GUEST'];
 
 function toMember(p: ParticipantInfo): VoiceMember {
@@ -47,6 +48,7 @@ function toMember(p: ParticipantInfo): VoiceMember {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let pokeTimer: ReturnType<typeof setTimeout> | null = null;
+let followUpTimer: ReturnType<typeof setTimeout> | undefined;
 let running = false;
 let again = false;
 // Log an outage once, not every POLL_MS, and say when it's over.
@@ -62,7 +64,9 @@ async function poll() {
   }
   running = true;
   try {
-    const active = (await rooms.listRooms()).filter((r) => r.numParticipants > 0);
+    // Not filtered by numParticipants: LiveKit Cloud updates that count late,
+    // which hid people who had just joined.
+    const active = await rooms.listRooms();
     const channels = active.length
       ? await db.channel.findMany({
           where: { id: { in: active.map((r) => r.name) }, type: 'VOICE' },
@@ -118,6 +122,10 @@ async function poll() {
 
 /** Re-check soon: someone joined, left or toggled their mic. */
 export function pokeVoicePresence() {
+  // Once right away, and once more shortly after: LiveKit can take a moment
+  // to list a participant who has just connected.
+  clearTimeout(followUpTimer);
+  followUpTimer = setTimeout(() => void poll(), POKE_FOLLOW_UP_MS);
   if (pokeTimer) return;
   pokeTimer = setTimeout(() => {
     pokeTimer = null;
