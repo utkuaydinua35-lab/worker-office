@@ -144,6 +144,14 @@ export function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_PX)}px`;
   }, [content]);
 
+  /** A pasted or dropped file: same path as the upload button, one attachment at a time. */
+  function attachFile(file: File) {
+    if (!(file.type in ATTACHMENT_MIME_TYPES))
+      return setError('Yalnızca resim (PNG, JPEG, WEBP, GIF) ya da PDF eklenebilir');
+    if (attachment || uploading) return setError('Önce mevcut eki gönder ya da kaldır');
+    void uploadFile(file);
+  }
+
   async function uploadFile(file: File) {
     if (file.size > ATTACHMENT_MAX_BYTES) return setError('Dosya en fazla 8 MB olabilir');
     setUploading(true);
@@ -201,7 +209,19 @@ export function ChatInput({
   const topRounded = !!(attachment || replyTo);
 
   return (
-    <div className="relative px-4 pb-1">
+    <div
+      className="relative px-4 pb-1"
+      // Dropping a file onto the input area attaches it too.
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        e.preventDefault();
+        attachFile(file);
+      }}
+    >
       {suggestions.length > 0 && (
         <ul
           role="listbox"
@@ -301,6 +321,14 @@ export function ChatInput({
             else stopTyping();
           }}
           onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+          // Ctrl+V / Cmd+V of a screenshot or copied image attaches it, like Discord.
+          // Pasted text (even alongside an image, as some apps put both) is left alone.
+          onPaste={(e) => {
+            const file = Array.from(e.clipboardData.files)[0];
+            if (!file || e.clipboardData.getData('text/plain')) return;
+            e.preventDefault();
+            attachFile(file);
+          }}
           onKeyDown={(e) => {
             if (suggestions.length > 0) {
               if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
