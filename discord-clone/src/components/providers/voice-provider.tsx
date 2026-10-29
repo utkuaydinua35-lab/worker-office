@@ -16,6 +16,7 @@ import { useSocket } from '@/components/providers/socket-provider';
 import { watchAudioPrefs } from '@/hooks/use-local-audio-prefs';
 import { apiFetch, errorMessage } from '@/lib/client-api';
 import { SERVER_DEAFENED_ATTRIBUTE, SERVER_MUTED_ATTRIBUTE } from '@/lib/voice-attributes';
+import { playVoiceSound } from '@/lib/voice-sounds';
 
 // webAudioMix routes remote audio through a GainNode, which is what lets the
 // per-user volume go above 100% (an <audio> element tops out at 1.0).
@@ -147,6 +148,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     const onDisconnected = (reason?: DisconnectReason) => {
       // CLIENT_INITIATED is us: leave(), or switching to another channel.
       if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) return;
+      playVoiceSound('leave'); // kicked, moved out by the server, or the network gave up
       setError(DISCONNECT_MESSAGES[reason] ?? 'Ses bağlantısı koptu.');
       setChannel(null);
       setStatus('idle');
@@ -165,15 +167,22 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           : 'Mikrofona ya da kameraya erişilemedi.',
       );
     };
+    // Someone (the music bot too) joining or leaving the channel you're in.
+    const onJoined = () => playVoiceSound('join');
+    const onLeft = () => playVoiceSound('leave');
     room
       .on(RoomEvent.Disconnected, onDisconnected)
       .on(RoomEvent.ParticipantAttributesChanged, onAttributes)
-      .on(RoomEvent.MediaDevicesError, onMediaError);
+      .on(RoomEvent.MediaDevicesError, onMediaError)
+      .on(RoomEvent.ParticipantConnected, onJoined)
+      .on(RoomEvent.ParticipantDisconnected, onLeft);
     return () => {
       room
         .off(RoomEvent.Disconnected, onDisconnected)
         .off(RoomEvent.ParticipantAttributesChanged, onAttributes)
-        .off(RoomEvent.MediaDevicesError, onMediaError);
+        .off(RoomEvent.MediaDevicesError, onMediaError)
+        .off(RoomEvent.ParticipantConnected, onJoined)
+        .off(RoomEvent.ParticipantDisconnected, onLeft);
       void room.disconnect();
     };
   }, [room, announce]);
@@ -238,6 +247,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         await room.connect(res.url, res.token);
         if (mine !== attempt.current) return;
         setStatus('connected');
+        playVoiceSound('join');
         announce(); // the mic may take a while (permission prompt); don't wait for it
       } catch (err) {
         if (mine !== attempt.current) return;
@@ -272,6 +282,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
   const leave = useCallback(() => {
     attempt.current++;
+    if (room.state !== 'disconnected') playVoiceSound('leave');
     void room.disconnect().finally(announce);
     setChannel(null);
     setStatus('idle');
@@ -298,11 +309,16 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         if (deafened) {
           setDeafened(false);
           setSelfMuted(false);
+          playVoiceSound('unmute');
         } else {
+          playVoiceSound(selfMuted ? 'unmute' : 'mute');
           setSelfMuted((m) => !m);
         }
       },
-      toggleDeafen: () => setDeafened((d) => !d),
+      toggleDeafen: () => {
+        playVoiceSound(deafened ? 'undeafen' : 'deafen');
+        setDeafened((d) => !d);
+      },
       setMediaError,
     }),
     [

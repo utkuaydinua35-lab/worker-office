@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useUnread } from '@/components/providers/unread-provider';
 import { useVoice } from '@/components/providers/voice-provider';
 import { Button } from '@/components/ui/button';
+import { onVoiceSoundsChange, playVoiceSound, setVoiceSoundsEnabled, voiceSoundsEnabled } from '@/lib/voice-sounds';
 
 /** "KeyV" → "V", "Backquote" → "`" — readable names for the key picker. */
 function keyLabel(code: string) {
@@ -33,6 +34,11 @@ export function VoiceNotificationSettings() {
   const voice = useVoice();
   const unread = useUnread();
   const [capturing, setCapturing] = useState(false);
+  const [sounds, setSounds] = useState(true);
+  useEffect(() => {
+    setSounds(voiceSoundsEnabled());
+    return onVoiceSoundsChange(() => setSounds(voiceSoundsEnabled()));
+  }, []);
 
   // Next key pressed becomes the push-to-talk key; Esc cancels.
   useEffect(() => {
@@ -69,6 +75,27 @@ export function VoiceNotificationSettings() {
         {NOTIFICATION_HINT[unread.notifications] && (
           <p className="text-xs text-destructive">{NOTIFICATION_HINT[unread.notifications]}</p>
         )}
+      </div>
+
+      <div className="space-y-2 rounded-lg bg-[#2b2d31] p-4">
+        <label className="flex cursor-pointer items-center justify-between gap-4">
+          <span>
+            <span className="block font-medium">Ses efektleri</span>
+            <span className="block text-sm text-muted-foreground">
+              Ses kanalına biri katılınca ya da ayrılınca, mikrofonunu veya kulaklığını açıp kapatınca kısa bir ses
+              çalar.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-primary"
+            checked={sounds}
+            onChange={(e) => {
+              setVoiceSoundsEnabled(e.target.checked);
+              if (e.target.checked) playVoiceSound('join');
+            }}
+          />
+        </label>
       </div>
 
       <div className="space-y-3 rounded-lg bg-[#2b2d31] p-4">
