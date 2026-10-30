@@ -11,13 +11,28 @@ import {
 } from '@livekit/rtc-node';
 
 import { CHANNELS, SAMPLE_RATE, spawnPcm, type ResolvedMedia } from '@/bot/media';
+import { ReadAhead } from '@/bot/read-ahead';
 import type { MusicState, MusicTrack } from '@/lib/music/types';
 
-const FRAME_MS = 10;
+// Opus' own frame length: half the per-frame overhead of 10 ms frames.
+const FRAME_MS = 20;
 const SAMPLES_PER_FRAME = (SAMPLE_RATE / 1000) * FRAME_MS;
 const FRAME_BYTES = SAMPLES_PER_FRAME * CHANNELS * 2; // s16le
-// Small output buffer so pause and skip take effect almost immediately.
-const SOURCE_QUEUE_MS = 200;
+const BYTES_PER_MS = FRAME_BYTES / FRAME_MS;
+/**
+ * Audio queued in LiveKit ahead of playout. This process also serves the
+ * website, so a busy moment (a page render, a big query, garbage collection)
+ * can hold up the feeding loop; with only 200 ms queued that ran the queue dry
+ * and the gaps crackled. Pause and skip clear the queue, so a deep one costs
+ * no responsiveness.
+ */
+const SOURCE_QUEUE_MS = 1000;
+/** PCM read ahead from yt-dlp/ffmpeg, for download hiccups (~5.8 MB). */
+const READ_AHEAD_MS = 30_000;
+/** Buffered before a track starts, so it doesn't begin with a stutter. */
+const PREBUFFER_MS = 1500;
+/** Music, not speech: Opus at its default ~32–48 kbps smears and crackles. */
+const MUSIC_BITRATE = BigInt(128_000);
 
 export interface QueuedTrack {
   track: MusicTrack;
@@ -83,7 +98,13 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
     const track = LocalAudioTrack.createAudioTrack('music', this.source);
     await this.room.localParticipant!.publishTrack(
       track,
-      new TrackPublishOptions({ source: TrackSource.SOURCE_MICROPHONE, dtx: false }),
+      new TrackPublishOptions({
+        source: TrackSource.SOURCE_MICROPHONE,
+        dtx: false,
+        // RED duplicates every packet for loss recovery: worth it for voice, not at music bitrates.
+        red: false,
+        audioEncoding: { maxBitrate: MUSIC_BITRATE },
+      }),
     );
   }
 
@@ -184,6 +205,7 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
 
   private async play(item: QueuedTrack): Promise<void> {
     const pcm = await spawnPcm(item.media, item.startMs);
+    const ahead = new ReadAhead(pcm.stdout, READ_AHEAD_MS * BYTES_PER_MS);
     const startedAt = this.elapsedMs;
     let aborted = false;
     this.abortCurrent = () => {
@@ -194,27 +216,37 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
       this.resumeWaiter?.();
     };
 
+    // Underrun bookkeeping: when LiveKit's queue ran dry before the next frame,
+    // and whether the download (nothing buffered) or this process (busy) was late.
+    let queuedUntil = 0;
+    const gaps = { download: 0, busy: 0, ms: 0 };
+
     try {
-      let pending = Buffer.alloc(0);
-      for await (const chunk of pcm.stdout as AsyncIterable<Buffer>) {
-        pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
-        let offset = 0;
-        while (pending.length - offset >= FRAME_BYTES) {
+      await ahead.fill(PREBUFFER_MS * BYTES_PER_MS);
+      for (;;) {
+        if (this.paused && !aborted) {
           while (this.paused && !aborted) {
-            // Not reading stdout while paused lets backpressure stall ffmpeg and yt-dlp.
             await new Promise<void>((resolve) => (this.resumeWaiter = resolve));
           }
-          if (aborted) return;
-          // Copy into an aligned buffer; a Buffer slice can start at an odd offset.
-          const bytes = pending.subarray(offset, offset + FRAME_BYTES);
-          const samples = new Int16Array(SAMPLES_PER_FRAME * CHANNELS);
-          new Uint8Array(samples.buffer).set(bytes);
-          await this.source.captureFrame(new AudioFrame(samples, SAMPLE_RATE, CHANNELS, SAMPLES_PER_FRAME));
-          this.elapsedMs += FRAME_MS;
-          offset += FRAME_BYTES;
+          queuedUntil = 0; // the queue was cleared on purpose
         }
-        pending = pending.subarray(offset);
         if (aborted) return;
+        const bytes = await ahead.read(FRAME_BYTES);
+        if (!bytes || aborted) break;
+
+        const now = performance.now();
+        if (queuedUntil && now > queuedUntil + FRAME_MS) {
+          gaps.ms += now - queuedUntil;
+          if (ahead.buffered < FRAME_BYTES) gaps.download++;
+          else gaps.busy++;
+        }
+        queuedUntil = Math.max(now, queuedUntil) + FRAME_MS;
+
+        // Copy into an aligned buffer; a Buffer can start at an odd offset.
+        const samples = new Int16Array(SAMPLES_PER_FRAME * CHANNELS);
+        new Uint8Array(samples.buffer).set(bytes);
+        await this.source.captureFrame(new AudioFrame(samples, SAMPLE_RATE, CHANNELS, SAMPLES_PER_FRAME));
+        this.elapsedMs += FRAME_MS;
       }
       const error = await pcm.finished;
       if (!aborted && error && item.media.info && this.elapsedMs === startedAt) {
@@ -230,6 +262,12 @@ export class MusicPlayer extends EventEmitter<PlayerEvents> {
     } finally {
       this.abortCurrent = null;
       pcm.kill(); // no-op once both have exited
+      if (gaps.download + gaps.busy > 0) {
+        console.warn(
+          `[music] "${item.track.title}": ses ${gaps.download + gaps.busy} kez kesildi (toplam ${Math.round(gaps.ms)} ms; ` +
+            `indirme yetişmedi: ${gaps.download}, sunucu meşguldü: ${gaps.busy})`,
+        );
+      }
     }
   }
 }
